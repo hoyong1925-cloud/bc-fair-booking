@@ -453,6 +453,28 @@ const DEFAULT_SESSION_SCHOOLS = {
   "1002AM": ["부천여흥중", "부천일신중", "부천중", "심원중", "상지초"],
   "1002PM": ["까치울중", "부명중", "부인중", "부천중중", "성곡중", "계남중"],
 };
+// 세션 내 1~4타임의 실제 시각 (오전/오후 공통 패턴)
+const TIME_LABELS_AM = { 1: "09:30~10:00", 2: "10:00~10:30", 3: "10:30~11:00", 4: "11:00~11:30" };
+const TIME_LABELS_PM = { 1: "13:30~14:00", 2: "14:00~14:30", 3: "14:30~15:00", 4: "15:00~15:30" };
+function timeRangeFor(sessionId, slot) {
+  const map = (sessionId || "").endsWith("PM") ? TIME_LABELS_PM : TIME_LABELS_AM;
+  return map[slot] || "";
+}
+function displaySlotNumber(sessionId, slot) {
+  return (sessionId || "").endsWith("PM") ? slot + 4 : slot;
+}
+function timeLabelFor(sessionId, slot) {
+  const range = timeRangeFor(sessionId, slot);
+  const dnum = displaySlotNumber(sessionId, slot);
+  return range ? `${dnum}타임 (${range})` : `${dnum}타임`;
+}
+// 학교별 고정 타임 기본값 (2026 진로박람회 실제 배정)
+const DEFAULT_SESSION_SCHOOL_TIMES = {
+  "1001AM": { "상일중": 1, "내동중": 2, "도당중": 2, "성주중": 3, "부천동여중": 4, "상동중": 4 },
+  "1001PM": { "부천남중": 1, "부천부흥중": 1, "중원중": 2, "부일중": 2, "중흥중": 3, "수주중": 3, "상도중": 4, "소명여중": 4 },
+  "1002AM": { "부천일신중": 1, "부천중": 2, "심원중": 3, "부천여흥중": 4 },
+  "1002PM": { "부인중": 1, "성곡중": 1, "까치울중": 2, "부천중중": 2, "부명중": 3, "계남중": 4 },
+};
 function defaultBoothConfig() {
   const names = { 1: "금융", 2: "미술치료사", 3: "음악치료사", 4: "체력단련" };
   const cfg = {};
@@ -479,7 +501,7 @@ function boothIds() {
 let SESSION_TOTALS = { ...DEFAULT_SESSION_TOTALS };
 let SESSION_DEADLINES = {};
 let SESSION_SCHOOLS = JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOLS));
-let SESSION_SCHOOL_TIMES = {}; // sessionId -> { schoolName: 1~4 }
+let SESSION_SCHOOL_TIMES = JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOL_TIMES)); // sessionId -> { schoolName: 1~4 }
 let SCHOOL_SESSION_LOCK_ENABLED = true; // 학교별 배정 세션이 아니면 신청 차단할지 여부
 let BOOTH_CONFIG = defaultBoothConfig();
 let ADMIN_PASSWORD = DEFAULT_ADMIN_PASSWORD;
@@ -619,7 +641,7 @@ async function loadConfigs() {
   const sc = await getState("session_schools_config", null, true);
   SESSION_SCHOOLS = sc || JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOLS));
   const sst = await getState("session_school_times_config", null, true);
-  SESSION_SCHOOL_TIMES = sst || {};
+  SESSION_SCHOOL_TIMES = sst || JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOL_TIMES));
   const lockCfg = await getState("school_session_lock_config", null, true);
   SCHOOL_SESSION_LOCK_ENABLED = lockCfg === null ? true : lockCfg;
   const bc = await getState("booth_config", null, true);
@@ -649,7 +671,10 @@ async function registerOneStudent(sessionId, school, grade, classNo, name, time,
 
   // 학교별로 정해진 세션이 아니면 등록 차단 (선생님 일괄등록 포함, 관리자가 켠 경우에만)
   const assignedSession = schoolAssignedSession(school);
-  if (SCHOOL_SESSION_LOCK_ENABLED && assignedSession && assignedSession !== sessionId) return { ok: false, reason: "wrong_session", correctSessionId: assignedSession };
+  if (SCHOOL_SESSION_LOCK_ENABLED) {
+    if (assignedSession && assignedSession !== sessionId) return { ok: false, reason: "wrong_session", correctSessionId: assignedSession };
+    if (!assignedSession) return { ok: false, reason: "unknown_school" };
+  }
 
   if (activeTotalOf(state) >= total) return { ok: false, reason: "session_full" };
   const tCap = timeCapOf(sessionId);
@@ -703,13 +728,13 @@ function scheduleHtmlForSession(sessionId) {
     const list = buckets[t];
     html += `
       <div class="time-col" style="background:${LINE_COLORS[t]}">
-        <div class="tc-num">${t}</div>
-        <div class="tc-lbl">${t}타임</div>
+        <div class="tc-num">${displaySlotNumber(sessionId, t)}</div>
+        <div class="tc-lbl">${timeRangeFor(sessionId, t)}</div>
         ${list.length ? `<div class="tc-schools">${list.join(", ")}</div>` : ""}
       </div>`;
   });
   html += `</div>`;
-  if (auto.length > 0) html += `<div class="auto-row"><b>자동배정 없음(직접 선택):</b> ${auto.join(", ")}</div>`;
+  if (auto.length > 0) html += `<div class="auto-row"><b>미배정(직접 선택 가능):</b> ${auto.join(", ")}</div>`;
   return html;
 }
 
@@ -793,10 +818,16 @@ async function submitRegistration() {
 
   // 학교별로 정해진 세션(요일/오전·오후)이 아니면 신청 차단
   const assignedSession = schoolAssignedSession(school);
-  if (SCHOOL_SESSION_LOCK_ENABLED && assignedSession && assignedSession !== currentSession) {
-    const correct = sessionMeta(assignedSession);
-    alert(`🔴 신청 시간을 확인하세요!\n\n${school}은(는) ${correct.date} ${correct.ampm} 세션에 배정되어 있습니다.\n지금 세션(${sessionMeta(currentSession).date} ${sessionMeta(currentSession).ampm})에서는 신청할 수 없습니다.\n홈 화면에서 ${correct.date} ${correct.ampm} 세션을 다시 선택해 주세요.`);
-    return;
+  if (SCHOOL_SESSION_LOCK_ENABLED) {
+    if (assignedSession && assignedSession !== currentSession) {
+      const correct = sessionMeta(assignedSession);
+      alert(`🔴 신청 시간을 확인하세요!\n\n${school}은(는) ${correct.date} ${correct.ampm} 세션에 배정되어 있습니다.\n지금 세션(${sessionMeta(currentSession).date} ${sessionMeta(currentSession).ampm})에서는 신청할 수 없습니다.\n홈 화면에서 ${correct.date} ${correct.ampm} 세션을 다시 선택해 주세요.`);
+      return;
+    }
+    if (!assignedSession) {
+      alert(`🔴 신청 시간을 확인하세요!\n\n등록된 참여 학교 명단에서 "${school}"을(를) 찾을 수 없습니다.\n학교명을 정확히 입력했는지 확인해 주시고, 계속 문제가 있으면 운영진에게 문의해 주세요.`);
+      return;
+    }
   }
 
   const total = SESSION_TOTALS[currentSession] || DEFAULT_SESSION_TOTALS[currentSession] || 900;
@@ -846,12 +877,11 @@ async function refreshTimeGrid() {
     const full = count >= cap;
     const btn = document.createElement("button");
     btn.className = "time-pick-card";
-    btn.style.background = LINE_COLORS[t].replace("var(", "").replace(")", "");
     btn.style.background = getComputedStyle(document.documentElement).getPropertyValue("--line-" + t);
     btn.disabled = full;
     btn.innerHTML = `
-      <div class="tp-num">${t}</div>
-      <div class="tp-lbl">${t}타임</div>
+      <div class="tp-num">${displaySlotNumber(currentSession, t)}</div>
+      <div class="tp-lbl">${timeRangeFor(currentSession, t)}</div>
       <div class="tp-cap">${count} / ${cap}명</div>
       ${full ? `<div class="tp-full">마감</div>` : ""}
     `;
@@ -870,12 +900,13 @@ function pickTime(t, full) {
 function renderAssignedBanner() {
   const s = sessionMeta(currentSession);
   const lineColor = LINE_COLORS[pending.time];
+  const label = timeLabelFor(currentSession, pending.time);
   document.getElementById("assigned-banner-box").innerHTML = `
     <div class="assigned-banner" style="background:${lineColor}">
-      <div class="time-num">${pending.time}</div>
+      <div class="time-num">${displaySlotNumber(currentSession, pending.time)}</div>
       <div class="detail">
-        <div class="t1">${s.date} ${s.ampm} · ${pending.school} ${pending.grade}학년 ${pending.classNo}반 ${pending.name}</div>
-        <div class="t2">${pending.time}타임 선택됨 (나머지 3개 타임은 자율 참여)</div>
+        <div class="t1">${s.date} · ${pending.school} ${pending.grade}학년 ${pending.classNo}반 ${pending.name}</div>
+        <div class="t2">${label} 선택됨 (그 외 시간은 자율 참여)</div>
       </div>
     </div>
   `;
@@ -924,6 +955,10 @@ async function finalizeBoothSelection(boothNum) {
       alert(`🔴 신청 시간을 확인하세요!\n\n${pending.school}은(는) ${correct.date} ${correct.ampm} 세션에 배정되어 있어 여기서는 등록할 수 없습니다.`);
       pending = null; showView("landing");
     }
+    else if (result.reason === "unknown_school") {
+      alert(`🔴 신청 시간을 확인하세요!\n\n등록된 참여 학교 명단에서 "${pending.school}"을(를) 찾을 수 없습니다. 학교명을 정확히 입력했는지 확인해 주세요.`);
+      pending = null; showView("landing");
+    }
     else if (result.reason === "session_full") { alert("🔴 마감되었습니다. 세션 정원이 모두 찼습니다."); pending = null; showView("landing"); }
     else if (result.reason === "time_full") { alert("🔴 마감되었습니다. 이 타임은 정원이 모두 찼습니다. 다른 타임을 선택해 주세요."); showView("timeselect"); await refreshTimeGrid(); }
     else { alert("🔴 마감되었습니다. 방금 이 프로그램의 정원이 다 찼습니다. 다른 프로그램을 선택해 주세요."); await refreshProgramGrid(); }
@@ -945,7 +980,7 @@ function renderTicket(r) {
     timelineRows += `
       <div class="tl-row ${isReserved ? "reserved" : ""}">
         <div class="tl-dot" style="background:${LINE_COLORS[t]}"></div>
-        <div class="tl-time mono">${t}타임</div>
+        <div class="tl-time mono">${timeRangeFor(r.session, t)}</div>
         <div class="tl-desc">${isReserved ? `${r.boothName}${cancelled ? " (취소됨)" : " (예약)"}` : "자율 부스 자유 참여"}</div>
       </div>`;
   }
@@ -972,9 +1007,9 @@ function renderTicket(r) {
     </div>
     <div class="ticket-body">
       <div class="assigned-banner" style="background:${lineColor}">
-        <div class="time-num">${r.time}</div>
+        <div class="time-num">${displaySlotNumber(r.session, r.time)}</div>
         <div class="detail">
-          <div class="t1">${s.date} ${s.ampm} · ${r.time}타임 예약</div>
+          <div class="t1">${s.date} · ${timeLabelFor(r.session, r.time)} 예약</div>
           <div class="t2">${r.boothName}</div>
         </div>
       </div>
@@ -1116,12 +1151,20 @@ async function onTeacherSessionChange() {
 
   if (school) {
     const assignedSession = schoolAssignedSession(school);
-    if (SCHOOL_SESSION_LOCK_ENABLED && assignedSession && assignedSession !== sessionId) {
-      const correct = sessionMeta(assignedSession);
-      alert(`🔴 신청 시간을 확인하세요!\n\n${school}은(는) ${correct.date} ${correct.ampm} 세션에 배정되어 있습니다.\n세션을 ${correct.date} ${correct.ampm}로 다시 선택해 주세요.`);
-      document.getElementById("t-time-field").style.display = "none";
-      document.getElementById("t-program-field").style.display = "none";
-      return;
+    if (SCHOOL_SESSION_LOCK_ENABLED) {
+      if (assignedSession && assignedSession !== sessionId) {
+        const correct = sessionMeta(assignedSession);
+        alert(`🔴 신청 시간을 확인하세요!\n\n${school}은(는) ${correct.date} ${correct.ampm} 세션에 배정되어 있습니다.\n세션을 ${correct.date} ${correct.ampm}로 다시 선택해 주세요.`);
+        document.getElementById("t-time-field").style.display = "none";
+        document.getElementById("t-program-field").style.display = "none";
+        return;
+      }
+      if (!assignedSession) {
+        alert(`🔴 신청 시간을 확인하세요!\n\n등록된 참여 학교 명단에서 "${school}"을(를) 찾을 수 없습니다. 학교명을 정확히 입력했는지 확인해 주세요.`);
+        document.getElementById("t-time-field").style.display = "none";
+        document.getElementById("t-program-field").style.display = "none";
+        return;
+      }
     }
   }
 
@@ -1131,7 +1174,7 @@ async function onTeacherSessionChange() {
   timeField.style.display = "block";
 
   if (fixedTime) {
-    note.textContent = `이 학교는 관리자 설정에 따라 ${fixedTime}타임으로 고정되어 있습니다.`;
+    note.textContent = `이 학교는 관리자 설정에 따라 ${timeLabelFor(sessionId, fixedTime)}(으)로 고정되어 있습니다.`;
     document.getElementById("t-time-grid").innerHTML = "";
     window.__teacherFixedTime = fixedTime;
   } else {
@@ -1158,8 +1201,8 @@ async function renderTeacherTimeGrid(sessionId) {
     btn.style.background = getComputedStyle(document.documentElement).getPropertyValue("--line-" + t);
     btn.disabled = full;
     btn.innerHTML = `
-      <div class="tp-num">${t}</div>
-      <div class="tp-lbl">${t}타임</div>
+      <div class="tp-num">${displaySlotNumber(sessionId, t)}</div>
+      <div class="tp-lbl">${timeRangeFor(sessionId, t)}</div>
       <div class="tp-cap">${count} / ${cap}명</div>
       ${full ? `<div class="tp-full">마감</div>` : ""}
     `;
@@ -1244,11 +1287,12 @@ async function submitTeacherBatch() {
     } else {
       const reasonText = r.reason === "duplicate" ? "이미 신청됨(중복)"
         : r.reason === "wrong_session" ? `잘못된 세션(${sessionMeta(r.correctSessionId).date} ${sessionMeta(r.correctSessionId).ampm}에 배정됨)`
+        : r.reason === "unknown_school" ? "명단에 없는 학교명"
         : r.reason === "session_full" ? "세션 정원 마감"
         : r.reason === "time_full" ? "타임 정원 마감"
         : "프로그램 정원 마감";
       results.fail.push({ line, reason: reasonText });
-      if (r.reason === "session_full" || r.reason === "time_full" || r.reason === "wrong_session") break; // 더 시도해도 소용없음
+      if (r.reason === "session_full" || r.reason === "time_full" || r.reason === "wrong_session" || r.reason === "unknown_school") break; // 더 시도해도 소용없음
     }
   }
 
@@ -1338,16 +1382,21 @@ function renderSchoolsSettings() {
   let html = `
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12.5px;font-weight:700;">
       <input type="checkbox" id="school-lock-toggle" ${SCHOOL_SESSION_LOCK_ENABLED ? "checked" : ""}>
-      학교별로 정해진 세션(요일·오전/오후)이 아니면 신청 차단하기
+      학교별로 정해진 세션(요일·오전/오후)이 아니면 신청 차단하기 (명단에 없는 학교도 차단)
     </label>
-    <div class="settings-hint">한 줄에 학교 하나씩, "학교명,타임(1~4)" 형식으로 입력하세요. 타임을 비우면 학생이 직접 선택합니다. 예) 내동중,1</div>`;
+    <div class="settings-hint">
+      한 줄에 학교 하나씩, "학교명,타임" 형식으로 입력하세요. 타임 칸에는 <b>그 세션 내 순번 1~4</b>를 입력합니다.<br>
+      오전 세션의 1~4는 09:30~11:30(30분 단위)로, 오후 세션의 1~4는 화면에 <b>5~8타임</b>(13:30~15:30)으로 표시됩니다.<br>
+      타임을 비우면 학생이 그 세션 안에서 직접 고를 수 있습니다. 예) 내동중,1
+    </div>`;
   SESSION_META.forEach(s => {
     const schools = SESSION_SCHOOLS[s.id] || [];
     const timeMap = SESSION_SCHOOL_TIMES[s.id] || {};
     const lines = schools.map(name => timeMap[name] ? `${name},${timeMap[name]}` : name).join("\n");
+    const rangeHint = s.id.endsWith("PM") ? "5~8타임 · 13:30~15:30" : "1~4타임 · 09:30~11:30";
     html += `
       <div class="setting-row">
-        <div class="s-label">${s.date} ${s.ampm}</div>
+        <div class="s-label">${s.date} ${s.ampm}<br><span style="font-weight:400;font-size:10px;opacity:0.8;">${rangeHint}</span></div>
         <textarea id="schools-input-${s.id}">${lines}</textarea>
       </div>`;
   });
@@ -1571,10 +1620,10 @@ async function loadAdmin() {
     <div class="summary-strip">
       <div class="summary-chip"><div class="k">정원 / 신청</div><div class="v mono">${total.toLocaleString()} / ${active.toLocaleString()}</div></div>
       <div class="summary-chip"><div class="k">취소</div><div class="v mono">${state.cancelledCount || 0}</div></div>
-      <div class="summary-chip"><div class="k">1타임</div><div class="v mono">${state.groups.A}/${cap}</div></div>
-      <div class="summary-chip"><div class="k">2타임</div><div class="v mono">${state.groups.B}/${cap}</div></div>
-      <div class="summary-chip"><div class="k">3타임</div><div class="v mono">${state.groups.C}/${cap}</div></div>
-      <div class="summary-chip"><div class="k">4타임</div><div class="v mono">${state.groups.D}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">${timeLabelFor(adminSession,1)}</div><div class="v mono">${state.groups.A}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">${timeLabelFor(adminSession,2)}</div><div class="v mono">${state.groups.B}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">${timeLabelFor(adminSession,3)}</div><div class="v mono">${state.groups.C}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">${timeLabelFor(adminSession,4)}</div><div class="v mono">${state.groups.D}/${cap}</div></div>
     </div>
     ${SESSION_DEADLINES[adminSession] ? `<div class="settings-hint" style="margin-bottom:10px;">마감일시: ${fmtDeadline(adminSession)}</div>` : ""}
   `;
@@ -1585,7 +1634,7 @@ async function loadAdmin() {
     html += `
       <div class="group-block">
         <div class="group-block-head" style="background:${LINE_COLORS[t]}">
-          <span>${t}타임</span><span class="mono">${state.groups[g]} / ${cap}</span>
+          <span>${timeLabelFor(adminSession, t)}</span><span class="mono">${state.groups[g]} / ${cap}</span>
         </div>`;
     boothIds().forEach(b => {
       const cfg = BOOTH_CONFIG[b];
