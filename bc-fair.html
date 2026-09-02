@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>진로박람회 예약 시스템</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-firestore-compat.min.js"></script>
+<style>
+  :root {
+    --paper: #F5F6F2;
+    --paper-dim: #E9EBE4;
+    --ink: #1C2333;
+    --ink-soft: #5A6178;
+    --line-1: #FF6B6B;
+    --line-2: #2EC4B6;
+    --line-3: #FF9F1C;
+    --line-4: #6A4C93;
+    --ok: #2EC4B6;
+    --warn: #FF9F1C;
+    --danger: #FF6B6B;
+    --radius: 4px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #app { max-width: 720px; margin: 0 auto; padding: 0 20px 80px; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 14px; border-bottom: 3px solid var(--ink); margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+  .brand { display: flex; flex-direction: column; }
+  .brand .kicker { font-size: 12px; letter-spacing: 0.02em; color: var(--ink-soft); font-family: ui-monospace, monospace; }
+  .brand h1 { margin: 2px 0 0; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; cursor: pointer; }
+  .nav-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .nav-btn { background: none; border: 1.5px solid var(--ink); color: var(--ink); padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: var(--radius); cursor: pointer; font-family: inherit; }
+  .nav-btn:hover { background: var(--ink); color: var(--paper); }
+
+  .storage-status { font-size: 11px; padding: 6px 10px; border-radius: var(--radius); margin-bottom: 16px; display: none; font-weight: 600; }
+  .storage-status.ok { display: block; background: #E1F7F4; color: #0E7C6F; }
+  .storage-status.bad { display: block; background: #FFE8E8; color: #B4232C; }
+
+  section { display: none; }
+  section.active { display: block; }
+
+  h2.section-title { font-size: 15px; font-weight: 800; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+  h2.section-title .tag { background: var(--ink); color: var(--paper); font-size: 10.5px; font-family: ui-monospace, monospace; padding: 2px 6px; border-radius: 3px; }
+  p.lead { color: var(--ink-soft); font-size: 13.5px; line-height: 1.6; margin: 0 0 20px; }
+
+  .howto-box { background: #fff; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 20px; }
+  .howto-box .howto-title { font-size: 12px; font-weight: 800; margin-bottom: 8px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; }
+  .howto-step { display: flex; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+  .howto-step .n { font-family: ui-monospace, monospace; font-weight: 800; color: var(--ink-soft); flex-shrink: 0; width: 16px; }
+
+  .session-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 8px; }
+  .session-card { border: 1.5px solid var(--paper-dim); background: #fff; border-radius: var(--radius); padding: 16px 14px; cursor: pointer; text-align: left; font-family: inherit; width: 100%; }
+  .session-card:hover { border-color: var(--ink); }
+  .session-card.locked { background: #FAFAFA; }
+  .session-card .date { font-size: 11px; color: var(--ink-soft); font-family: ui-monospace, monospace; }
+  .session-card .ampm { font-size: 17px; font-weight: 800; margin-top: 3px; }
+  .session-card .count { font-size: 11.5px; color: var(--ink-soft); margin-top: 8px; font-family: ui-monospace, monospace; }
+  .session-card .count b { color: var(--ink); }
+  .session-card .locked-badge { display: inline-block; font-size: 10.5px; font-weight: 800; color: #fff; background: var(--danger); padding: 3px 8px; border-radius: 3px; margin-top: 8px; }
+
+  .participating-line { font-size: 11.5px; color: var(--ink-soft); margin-top: 10px; line-height: 1.6; border-top: 1px dashed var(--paper-dim); padding-top: 10px; }
+  .participating-line b { color: var(--ink); font-weight: 800; }
+
+  .time-columns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .time-col { border-radius: var(--radius); padding: 9px 6px 8px; color: #fff; text-align: center; }
+  .time-col .tc-num { font-family: ui-monospace, monospace; font-size: 17px; font-weight: 800; line-height: 1; }
+  .time-col .tc-lbl { font-size: 10.5px; opacity: 0.92; margin-top: 3px; }
+  .time-col .tc-schools { font-size: 9.5px; margin-top: 7px; line-height: 1.4; opacity: 0.95; word-break: keep-all; }
+
+  .auto-row { margin-top: 8px; background: var(--paper-dim); border-radius: var(--radius); padding: 8px 10px; font-size: 11px; color: var(--ink-soft); line-height: 1.6; }
+  .auto-row b { color: var(--ink); font-weight: 800; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: var(--ink-soft); }
+  .field input, .field select, .field textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 14.5px; font-family: inherit; background: #fff; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .btn-primary { width: 100%; padding: 13px; background: var(--ink); color: var(--paper); border: none; border-radius: var(--radius); font-size: 14.5px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 6px; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { width: 100%; padding: 11px; background: none; color: var(--ink); border: 1.5px solid var(--ink); border-radius: var(--radius); font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
+  .btn-danger { width: 100%; padding: 11px; background: none; color: var(--danger); border: 1.5px solid var(--danger); border-radius: var(--radius); font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 10px; }
+  .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+  .back-link { background: none; border: none; color: var(--ink-soft); font-size: 12.5px; cursor: pointer; padding: 0; margin-bottom: 14px; font-family: inherit; }
+  .back-link:hover { color: var(--ink); }
+
+  .assigned-banner { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: var(--radius); color: #fff; margin-bottom: 18px; }
+  .assigned-banner .time-num { font-family: ui-monospace, monospace; font-size: 30px; font-weight: 800; line-height: 1; }
+  .assigned-banner .detail .t1 { font-size: 11.5px; opacity: 0.85; }
+  .assigned-banner .detail .t2 { font-size: 15px; font-weight: 800; margin-top: 2px; }
+
+  .time-pick-grid, .program-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .time-pick-card { border-radius: var(--radius); padding: 16px 12px; cursor: pointer; text-align: center; font-family: inherit; color: #fff; border: none; }
+  .time-pick-card:disabled { opacity: 0.4; cursor: not-allowed; }
+  .time-pick-card .tp-num { font-family: ui-monospace, monospace; font-size: 26px; font-weight: 800; line-height: 1; }
+  .time-pick-card .tp-lbl { font-size: 12px; opacity: 0.9; margin-top: 4px; font-weight: 700; }
+  .time-pick-card .tp-cap { font-size: 11px; opacity: 0.85; margin-top: 8px; font-family: ui-monospace, monospace; }
+  .time-pick-card .tp-full { font-size: 10.5px; font-weight: 800; margin-top: 6px; background: rgba(255,255,255,0.9); color: var(--danger); display: inline-block; padding: 2px 8px; border-radius: 3px; }
+
+  .program-card { border: 1.5px solid var(--paper-dim); background: #fff; border-radius: var(--radius); padding: 13px 12px; cursor: pointer; text-align: left; font-family: inherit; position: relative; }
+  .program-card:hover:not(:disabled) { border-color: var(--ink); }
+  .program-card:disabled { opacity: 0.45; cursor: not-allowed; }
+  .program-card .pname { font-size: 14px; font-weight: 800; }
+  .program-card .pcap { font-size: 11px; color: var(--ink-soft); margin-top: 6px; font-family: ui-monospace, monospace; }
+  .program-card .pfull { position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 700; color: var(--danger); }
+  .program-card .pbar { height: 5px; background: var(--paper-dim); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .program-card .pbar-fill { height: 100%; }
+
+  .ticket { background: #fff; border: 1.5px solid var(--ink); border-radius: 6px; overflow: hidden; }
+  .ticket.cancelled { opacity: 0.6; }
+  .ticket-head { padding: 18px 18px 14px; border-bottom: 1.5px dashed var(--paper-dim); display: flex; justify-content: space-between; align-items: flex-start; }
+  .ticket-head .school { font-size: 11.5px; color: var(--ink-soft); }
+  .ticket-head .name { font-size: 18px; font-weight: 800; margin-top: 2px; }
+  .ticket-head .gradeclass { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .ticket-head .resid { text-align: right; }
+  .ticket-head .resid .k { font-size: 10px; color: var(--ink-soft); }
+  .ticket-head .resid .v { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 700; }
+  .cancel-badge { display: inline-block; background: var(--danger); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 3px; margin-top: 6px; }
+  .ticket-body { padding: 16px 18px 6px; }
+  .timeline { padding: 4px 18px 20px; }
+  .tl-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--paper-dim); font-size: 13px; }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .tl-row .tl-time { font-family: ui-monospace, monospace; font-weight: 700; width: 46px; flex-shrink: 0; }
+  .tl-row .tl-desc { color: var(--ink-soft); }
+  .tl-row.reserved .tl-desc { color: var(--ink); font-weight: 700; }
+  .note-box { margin: 0 18px 18px; padding: 12px 14px; background: var(--paper); border-radius: var(--radius); font-size: 12px; color: var(--ink-soft); line-height: 1.6; }
+  .cancel-box { margin: 0 18px 18px; }
+
+  .lookup-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .lookup-tab { flex: 1; padding: 8px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); background: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .lookup-tab.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+  .lookup-pane { display: none; }
+  .lookup-pane.active { display: block; }
+  .lookup-input-row { display: flex; gap: 8px; }
+  .lookup-input-row input { flex: 1; }
+  .lookup-input-row button { padding: 0 16px; background: var(--ink); color: #fff; border: none; border-radius: var(--radius); font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
+  .match-item { background: #fff; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; text-align: left; width: 100%; }
+  .match-item:hover { border-color: var(--ink); }
+  .match-item .m-top { font-size: 13px; font-weight: 800; }
+  .match-item .m-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+  .match-item .m-status { font-size: 10.5px; font-weight: 700; margin-top: 4px; }
+  .match-item .m-status.active { color: var(--ok); }
+  .match-item .m-status.cancelled { color: var(--danger); }
+  .empty-msg { font-size: 13px; color: var(--ink-soft); padding: 30px 0; text-align: center; }
+
+  .admin-session-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .admin-tab { padding: 7px 12px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 12.5px; font-weight: 700; background: #fff; cursor: pointer; font-family: inherit; }
+  .admin-tab.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+  .group-block { margin-bottom: 18px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); overflow: hidden; }
+  .group-block-head { padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; color: #fff; font-size: 12.5px; font-weight: 700; }
+  .booth-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 12.5px; border-top: 1px solid var(--paper-dim); background: #fff; }
+  .booth-row .bname { width: 100px; flex-shrink: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .booth-row .bar-track { flex: 1; height: 8px; background: var(--paper-dim); border-radius: 4px; overflow: hidden; }
+  .booth-row .bar-fill { height: 100%; border-radius: 4px; }
+  .booth-row .bcount { width: 62px; text-align: right; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--ink-soft); flex-shrink: 0; }
+  .summary-strip { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .summary-chip { flex: 1; min-width: 120px; background: #fff; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 10px 12px; }
+  .summary-chip .k { font-size: 10.5px; color: var(--ink-soft); }
+  .summary-chip .v { font-family: ui-monospace, monospace; font-size: 17px; font-weight: 800; margin-top: 2px; }
+
+  .settings-panel { border: 1.5px solid var(--ink); border-radius: var(--radius); margin-bottom: 22px; overflow: hidden; }
+  .settings-head { background: var(--ink); color: #fff; padding: 10px 14px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .settings-body { padding: 14px; background: #fff; display: none; }
+  .settings-body.open { display: block; }
+  .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .setting-row .s-label { width: 96px; font-size: 12px; color: var(--ink-soft); flex-shrink: 0; }
+  .setting-row input[type=text] { flex: 2; padding: 8px 10px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 13px; font-family: inherit; min-width: 100px; }
+  .setting-row input[type=password] { flex: 2; padding: 8px 10px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 13px; font-family: inherit; min-width: 100px; }
+  .setting-row input[type=number] { flex: 1; padding: 8px 10px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 13px; font-family: inherit; width: 80px; }
+  .setting-row input[type=datetime-local] { flex: 1.4; padding: 8px 10px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 12.5px; font-family: inherit; min-width: 170px; }
+  .setting-row textarea { flex: 1; padding: 8px 10px; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); font-size: 12.5px; font-family: inherit; min-height: 76px; resize: vertical; }
+  .settings-save { margin-top: 10px; padding: 9px 16px; background: var(--ok); color: #fff; border: none; border-radius: var(--radius); font-weight: 700; cursor: pointer; font-family: inherit; font-size: 12.5px; }
+  .settings-hint { font-size: 11px; color: var(--ink-soft); margin: -4px 0 10px; }
+  .save-confirm { display: inline-block; margin-left: 10px; font-size: 12px; font-weight: 700; color: var(--ok); opacity: 0; transition: opacity 0.2s; }
+  .save-confirm.show { opacity: 1; }
+
+  .export-box { border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 14px; background: #fff; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .export-box .et { font-size: 13px; font-weight: 700; }
+  .export-box .ed { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .export-btn { padding: 10px 16px; background: var(--ink); color: #fff; border: none; border-radius: var(--radius); font-weight: 700; cursor: pointer; font-family: inherit; font-size: 12.5px; white-space: nowrap; }
+
+  .teacher-result { border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 12px; margin-top: 14px; background: #fff; font-size: 12.5px; }
+  .teacher-result .r-ok { color: var(--ok); font-weight: 700; margin-bottom: 6px; }
+  .teacher-result .r-fail { color: var(--danger); font-weight: 700; margin-top: 10px; margin-bottom: 6px; }
+  .teacher-result .r-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--paper-dim); font-family: ui-monospace, monospace; font-size: 11.5px; }
+
+  .loading { text-align: center; padding: 40px 0; color: var(--ink-soft); font-size: 13px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: var(--radius); font-size: 12.5px; opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 50; max-width: 90%; text-align: center; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 480px) {
+    .time-pick-grid, .program-grid { grid-template-columns: 1fr; }
+    .field-row { flex-direction: column; gap: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="kicker">CAREER FAIR · 10.01–10.02</div>
+      <h1 onclick="showView('landing')">진로박람회 예약</h1>
+    </div>
+    <div class="nav-btns">
+      <button class="nav-btn" onclick="showView('landing')">홈</button>
+      <button class="nav-btn" onclick="showView('lookup')">내 예약</button>
+      <button class="nav-btn" onclick="showView('teacher')">선생님용</button>
+      <button class="nav-btn" onclick="showView('admin')">현황판</button>
+    </div>
+  </div>
+
+  <div id="storage-status" class="storage-status"></div>
+
+  <!-- ===================== LANDING ===================== -->
+  <section id="view-landing" class="active">
+    <h2 class="section-title">세션 선택 <span class="tag">STEP 1</span></h2>
+    <div class="howto-box">
+      <div class="howto-title">예약 방법</div>
+      <div class="howto-step"><span class="n">1</span><span>세션(날짜·오전/오후)을 선택하고 학교/학년/반/이름을 입력합니다</span></div>
+      <div class="howto-step"><span class="n">2</span><span>참여할 <b>타임(1~4)을 직접 선택</b>합니다 (정원이 찬 타임은 선택 불가)</span></div>
+      <div class="howto-step"><span class="n">3</span><span>그 타임에 참여할 <b>프로그램도 직접 선택</b>합니다 (정원 도달 시 마감)</span></div>
+      <div class="howto-step"><span class="n">4</span><span>예약번호가 발급되며, '내 예약'에서 조회·취소할 수 있습니다</span></div>
+    </div>
+    <div class="session-grid" id="session-grid"><div class="loading">불러오는 중…</div></div>
+  </section>
+
+  <!-- ===================== REGISTER ===================== -->
+  <section id="view-register">
+    <button class="back-link" onclick="showView('landing')">← 세션 다시 선택</button>
+    <h2 class="section-title">정보 입력 <span class="tag">STEP 2</span></h2>
+    <p class="lead" id="register-session-label"></p>
+    <div class="field"><label>학교명</label><input type="text" id="input-school" placeholder="예: 가온고등학교"></div>
+    <div class="field-row">
+      <div class="field"><label>학년</label><input type="text" id="input-grade" placeholder="예: 2"></div>
+      <div class="field"><label>반</label><input type="text" id="input-classno" placeholder="예: 3"></div>
+    </div>
+    <div class="field"><label>이름</label><input type="text" id="input-name" placeholder="예: 김도윤"></div>
+    <button class="btn-primary" id="submit-btn" onclick="submitRegistration()">다음</button>
+  </section>
+
+  <!-- ===================== TIME SELECT ===================== -->
+  <section id="view-timeselect">
+    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <h2 class="section-title">타임 선택 <span class="tag">STEP 3</span></h2>
+    <p class="lead">참여할 타임을 직접 선택하세요. 정원이 찬 타임은 선택할 수 없습니다.</p>
+    <div class="time-pick-grid" id="time-pick-grid"><div class="loading">불러오는 중…</div></div>
+    <button class="btn-secondary" onclick="refreshTimeGrid()">↻ 정원 새로고침</button>
+  </section>
+
+  <!-- ===================== PROGRAM SELECT ===================== -->
+  <section id="view-boothselect">
+    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <h2 class="section-title">프로그램 선택 <span class="tag">STEP 4</span></h2>
+    <div id="assigned-banner-box"></div>
+    <p class="lead">이 타임에 참여할 프로그램을 하나 선택하세요. 정원이 찬 프로그램은 선택할 수 없습니다.</p>
+    <div class="program-grid" id="program-grid"><div class="loading">불러오는 중…</div></div>
+    <button class="btn-secondary" onclick="refreshProgramGrid()">↻ 정원 새로고침</button>
+  </section>
+
+  <!-- ===================== TICKET ===================== -->
+  <section id="view-ticket">
+    <h2 class="section-title">배정 완료</h2>
+    <div class="ticket" id="ticket-container"></div>
+    <button class="btn-secondary" onclick="showView('landing')">처음으로</button>
+  </section>
+
+  <!-- ===================== LOOKUP ===================== -->
+  <section id="view-lookup">
+    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <h2 class="section-title">내 예약 조회 · 취소</h2>
+    <p class="lead">예약번호가 있으면 번호로, 모르면 학교/이름으로 찾을 수 있습니다. 마감일시 이전이라면 이곳에서 취소도 가능합니다.</p>
+
+    <div class="lookup-tabs">
+      <button class="lookup-tab active" id="tab-byid" onclick="switchLookupTab('byid')">예약번호로 조회</button>
+      <button class="lookup-tab" id="tab-byname" onclick="switchLookupTab('byname')">이름으로 찾기</button>
+    </div>
+
+    <div class="lookup-pane active" id="pane-byid">
+      <div class="lookup-input-row">
+        <input type="text" id="lookup-input" placeholder="예약번호 (예: RS-내동중-001-4F)">
+        <button onclick="doLookup()">조회</button>
+      </div>
+    </div>
+
+    <div class="lookup-pane" id="pane-byname">
+      <div class="field"><label>학교명</label><input type="text" id="find-school" placeholder="예: 가온고등학교"></div>
+      <div class="field-row">
+        <div class="field"><label>학년</label><input type="text" id="find-grade" placeholder="예: 2"></div>
+        <div class="field"><label>반</label><input type="text" id="find-classno" placeholder="예: 3"></div>
+      </div>
+      <div class="field"><label>이름</label><input type="text" id="find-name" placeholder="예: 김도윤"></div>
+      <button class="btn-primary" onclick="doFindByName()">내 예약 찾기</button>
+    </div>
+
+    <div id="lookup-result"></div>
+  </section>
+
+  <!-- ===================== TEACHER MODE ===================== -->
+  <section id="view-teacher">
+    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <h2 class="section-title">선생님용 일괄 등록</h2>
+    <p class="lead">학교/세션/타임/프로그램을 한 번만 정하면, 학생 명단을 한꺼번에 등록할 수 있습니다.</p>
+
+    <div class="field"><label>학교명</label><input type="text" id="t-school" placeholder="예: 가온고등학교"></div>
+    <div class="field"><label>세션</label>
+      <select id="t-session" onchange="onTeacherSessionChange()">
+        <option value="">세션을 선택하세요</option>
+      </select>
+    </div>
+
+    <div class="field" id="t-time-field" style="display:none;">
+      <label>타임</label>
+      <div class="time-pick-grid" id="t-time-grid"></div>
+      <div class="settings-hint" id="t-time-fixed-note"></div>
+    </div>
+
+    <div class="field" id="t-program-field" style="display:none;">
+      <label>프로그램 (전체 학생 공통)</label>
+      <select id="t-program"></select>
+    </div>
+
+    <div class="field">
+      <label>학생 명단 (한 줄에 한 명, "학년,반,이름" 형식 — 예: 2,3,김도윤)</label>
+      <textarea id="t-students" rows="6" placeholder="2,3,김도윤&#10;2,3,이서연&#10;2,4,박지훈"></textarea>
+    </div>
+    <div class="field">
+      <label>또는 엑셀 업로드 (학년/반/이름 열이 있는 파일)</label>
+      <input type="file" id="t-excel" accept=".xlsx,.xls,.csv" onchange="handleTeacherExcel(event)">
+    </div>
+
+    <button class="btn-primary" onclick="submitTeacherBatch()">일괄 등록</button>
+    <div id="teacher-result"></div>
+  </section>
+
+  <!-- ===================== ADMIN ===================== -->
+  <section id="view-admin">
+    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <h2 class="section-title">운영 설정 &amp; 현황판</h2>
+
+    <div class="settings-panel">
+      <div class="settings-head" onclick="toggleSettings('sess')">
+        <span>🔒 ① 세션별 인원 · 마감일시 설정</span><span id="sess-arrow">▸</span>
+      </div>
+      <div class="settings-body" id="settings-sess"></div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-head" onclick="toggleSettings('schools')">
+        <span>🔒 ② 참여 학교 목록 · 고정 타임 설정</span><span id="schools-arrow">▸</span>
+      </div>
+      <div class="settings-body" id="settings-schools"></div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-head" onclick="toggleSettings('booth')">
+        <span>🔒 ③ 프로그램명 · 정원 설정</span><span id="booth-arrow">▸</span>
+      </div>
+      <div class="settings-body" id="settings-booth"></div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-head" onclick="toggleSettings('pw')">
+        <span>🔒 ④ 관리자 비밀번호 변경</span><span id="pw-arrow">▸</span>
+      </div>
+      <div class="settings-body" id="settings-pw"></div>
+    </div>
+
+    <div class="export-box">
+      <div>
+        <div class="et">🔒 결과 다운로드</div>
+        <div class="ed">전체 세션의 학교·학년·반·이름·프로그램·상태를 엑셀 파일로 내려받습니다</div>
+      </div>
+      <button class="export-btn" onclick="exportExcel()">엑셀 다운로드</button>
+    </div>
+
+    <div class="admin-session-tabs" id="admin-tabs"></div>
+    <div id="admin-summary"></div>
+    <button class="btn-secondary" onclick="loadAdmin()">↻ 현황 새로고침</button>
+    <div id="admin-content"><div class="loading">불러오는 중…</div></div>
+  </section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =================================================================
+   🔥 Firebase 설정 (독립 배포용)
+   -----------------------------------------------------------------
+   Firebase 콘솔에서 발급받은 firebaseConfig 객체를 아래에 그대로
+   붙여넣으세요. apiKey가 채워지면 자동으로 Firestore를 사용하고,
+   비어 있으면(현재 상태) Claude 미리보기 저장소로 동작합니다.
+   ================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDMtevZ87dWi9U-2RQ1xd72IwiU-4Bw4T4",
+  authDomain: "bc-fair-2026.firebaseapp.com",
+  projectId: "bc-fair-2026",
+  storageBucket: "bc-fair-2026.firebasestorage.app",
+  messagingSenderId: "279609642732",
+  appId: "1:279609642732:web:291021f08b6886dc965fc9"
+};
+
+let fsDb = null;
+let storageBackend = "none"; // "firebase" | "claude" | "local"
+if (firebaseConfig.apiKey && typeof firebase !== "undefined") {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fsDb = firebase.firestore();
+    storageBackend = "firebase";
+  } catch (e) {
+    console.error("Firebase 초기화 실패", e);
+  }
+}
+
+/* ---------------- 기본 구조(고정) ---------------- */
+const SESSION_META = [
+  { id: "1001AM", date: "10월 1일(목)", ampm: "오전" },
+  { id: "1001PM", date: "10월 1일(목)", ampm: "오후" },
+  { id: "1002AM", date: "10월 2일(금)", ampm: "오전" },
+  { id: "1002PM", date: "10월 2일(금)", ampm: "오후" },
+];
+const GROUPS = ["A", "B", "C", "D"]; // 내부 저장용, 타임 1~4 와 1:1 대응
+const LINE_COLORS = { 1: "var(--line-1)", 2: "var(--line-2)", 3: "var(--line-3)", 4: "var(--line-4)" };
+const BOOTH_COUNT = 15;
+
+/* ---------------- 기본값 ---------------- */
+const DEFAULT_SESSION_TOTALS = { "1001AM": 843, "1001PM": 967, "1002AM": 911, "1002PM": 926 };
+const DEFAULT_SESSION_SCHOOLS = {
+  "1001AM": ["내동중", "도당중", "부천동여중", "상동중", "상일중", "성주중"],
+  "1001PM": ["부일중", "부천남중", "부천부흥중", "상도중", "소명여중", "수주중", "중원중", "중흥중"],
+  "1002AM": ["부천여흥중", "부천일신중", "부천중", "심원중", "상지초"],
+  "1002PM": ["까치울중", "부명중", "부인중", "부천중중", "성곡중", "계남중"],
+};
+function defaultBoothConfig() {
+  const names = { 1: "금융", 2: "미술치료사", 3: "음악치료사", 4: "체력단련" };
+  const cfg = {};
+  for (let i = 1; i <= BOOTH_COUNT; i++) cfg[i] = { name: names[i] || `프로그램${i}`, capacity: 18 };
+  return cfg;
+}
+const DEFAULT_ADMIN_PASSWORD = "0925";
+
+/* ---------------- 전역 상태 ---------------- */
+let SESSION_TOTALS = { ...DEFAULT_SESSION_TOTALS };
+let SESSION_DEADLINES = {};
+let SESSION_SCHOOLS = JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOLS));
+let SESSION_SCHOOL_TIMES = {}; // sessionId -> { schoolName: 1~4 }
+let BOOTH_CONFIG = defaultBoothConfig();
+let ADMIN_PASSWORD = DEFAULT_ADMIN_PASSWORD;
+let currentSession = null;
+let pending = null; // {school, grade, classNo, name, time}
+let adminSession = SESSION_META[0].id;
+let isAdminAuthed = false;
+
+/* ---------------- 저장소: Firebase(있으면) > Claude 미리보기 저장소 > 로컬 폴백 ---------------- */
+let memoryStore = {};
+let storageWarned = false;
+function warnStorageOnce() {
+  if (!storageWarned) { storageWarned = true; toast("⚠ 공유 저장소 연결이 원활하지 않아 이 기기에서 임시로 저장됩니다"); }
+}
+
+async function fsGetRaw(key) {
+  const doc = await fsDb.collection("kv").doc(key).get();
+  if (!doc.exists) return null;
+  return doc.data().value;
+}
+async function fsSetRaw(key, jsonString) {
+  await fsDb.collection("kv").doc(key).set({ value: jsonString, updatedAt: Date.now() });
+}
+
+async function getState(key, fallback, shared) {
+  try {
+    if (storageBackend === "firebase") {
+      const val = await fsGetRaw(key);
+      if (val === null) return fallback;
+      memoryStore[key] = val;
+      return JSON.parse(val);
+    }
+    if (!window.storage) throw new Error("no-storage");
+    const r = await window.storage.get(key, shared);
+    const val = r ? JSON.parse(r.value) : fallback;
+    if (r) memoryStore[key] = r.value;
+    return val;
+  } catch (e) {
+    if (Object.prototype.hasOwnProperty.call(memoryStore, key)) {
+      try { return JSON.parse(memoryStore[key]); } catch (e2) { return fallback; }
+    }
+    return fallback;
+  }
+}
+async function setState(key, value, shared) {
+  const jsonString = JSON.stringify(value);
+  memoryStore[key] = jsonString;
+  try {
+    if (storageBackend === "firebase") { await fsSetRaw(key, jsonString); return; }
+    if (!window.storage) throw new Error("no-storage");
+    await window.storage.set(key, jsonString, shared);
+  } catch (e) { warnStorageOnce(); }
+}
+
+function emptySessionState() {
+  const groups = {}; const boothCounts = {};
+  GROUPS.forEach(g => { groups[g] = 0; boothCounts[g] = {}; for (let b = 1; b <= BOOTH_COUNT; b++) boothCounts[g][b] = 0; });
+  return { groups, boothCounts, cancelledCount: 0 };
+}
+
+/* ---------------- 유틸 ---------------- */
+function sessionMeta(id) { return SESSION_META.find(s => s.id === id); }
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600);
+}
+function showView(name) {
+  document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
+  if (name === "admin") loadAdmin();
+  if (name === "landing") renderSessionGrid();
+  if (name === "teacher") initTeacherView();
+  checkStorageStatus();
+}
+function isSessionLocked(id) {
+  const d = SESSION_DEADLINES[id];
+  if (!d) return false;
+  return new Date() > new Date(d);
+}
+function fmtDeadline(id) {
+  const d = SESSION_DEADLINES[id];
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "";
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getMonth()+1}/${dt.getDate()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+function schoolCode(school) {
+  return (school || "학교").replace(/[\s,/\\'"]+/g, "").slice(0, 6) || "학교";
+}
+function randSuffix(len) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+function activeTotalOf(state) { return GROUPS.reduce((sum, g) => sum + (state.groups[g] || 0), 0); }
+function timeCapOf(sessionId) { return Math.ceil((SESSION_TOTALS[sessionId] || DEFAULT_SESSION_TOTALS[sessionId] || 900) / 4); }
+
+/* ---------------- 설정 불러오기 ---------------- */
+async function loadConfigs() {
+  const st = await getState("session_totals_config", null, true);
+  SESSION_TOTALS = st || { ...DEFAULT_SESSION_TOTALS };
+  const dl = await getState("session_deadline_config", null, true);
+  SESSION_DEADLINES = dl || {};
+  const sc = await getState("session_schools_config", null, true);
+  SESSION_SCHOOLS = sc || JSON.parse(JSON.stringify(DEFAULT_SESSION_SCHOOLS));
+  const sst = await getState("session_school_times_config", null, true);
+  SESSION_SCHOOL_TIMES = sst || {};
+  const bc = await getState("booth_config", null, true);
+  BOOTH_CONFIG = bc || defaultBoothConfig();
+  const pw = await getState("admin_password_config", null, true);
+  ADMIN_PASSWORD = pw || DEFAULT_ADMIN_PASSWORD;
+}
+
+/* ---------------- 핵심: 학생 1명 등록 (중복없는 예약번호 + 정원 검증을 한 곳에서) ---------------- */
+async function registerOneStudent(sessionId, school, grade, classNo, name, time, boothNum) {
+  const total = SESSION_TOTALS[sessionId] || DEFAULT_SESSION_TOTALS[sessionId] || 900;
+  const key = "session_state:" + sessionId;
+  const state = await getState(key, emptySessionState(), true);
+  const group = GROUPS[time - 1];
+
+  if (activeTotalOf(state) >= total) return { ok: false, reason: "session_full" };
+  const tCap = timeCapOf(sessionId);
+  if ((state.groups[group] || 0) >= tCap) return { ok: false, reason: "time_full" };
+  const cfg = BOOTH_CONFIG[boothNum];
+  const curBooth = (state.boothCounts[group] && state.boothCounts[group][boothNum]) || 0;
+  if (curBooth >= cfg.capacity) return { ok: false, reason: "booth_full" };
+
+  state.groups[group] = (state.groups[group] || 0) + 1;
+  state.boothCounts[group][boothNum] = curBooth + 1;
+  await setState(key, state, true);
+
+  const sCode = schoolCode(school);
+  const seqKey = "school_seq:" + sessionId + ":" + sCode;
+  const seq = (await getState(seqKey, 0, true)) + 1;
+  await setState(seqKey, seq, true);
+  const resId = "RS-" + sCode + "-" + String(seq).padStart(3, "0") + "-" + randSuffix(2);
+
+  const record = {
+    id: resId, session: sessionId,
+    school, grade, classNo, name,
+    group, time, booth: boothNum, boothName: cfg.name,
+    status: "active", createdAt: Date.now(), cancelledAt: null
+  };
+  await setState("reservation:" + resId, record, true);
+
+  const aggKey = "session_reservations:" + sessionId;
+  const agg = await getState(aggKey, {}, true);
+  agg[resId] = record;
+  await setState(aggKey, agg, true);
+
+  return { ok: true, record };
+}
+
+/* ---------------- 랜딩: 세션 카드 ---------------- */
+function scheduleHtmlForSession(sessionId) {
+  const schools = SESSION_SCHOOLS[sessionId] || [];
+  const timeMap = SESSION_SCHOOL_TIMES[sessionId] || {};
+  const buckets = { 1: [], 2: [], 3: [], 4: [] };
+  const auto = [];
+  schools.forEach(name => {
+    const t = timeMap[name];
+    if (t && buckets[t]) buckets[t].push(name); else auto.push(name);
+  });
+
+  let html = "";
+  if (schools.length > 0) html += `<div class="participating-line"><b>참여 학교:</b> ${schools.join(", ")}</div>`;
+  html += `<div class="time-columns">`;
+  [1, 2, 3, 4].forEach(t => {
+    const list = buckets[t];
+    html += `
+      <div class="time-col" style="background:${LINE_COLORS[t]}">
+        <div class="tc-num">${t}</div>
+        <div class="tc-lbl">${t}타임</div>
+        ${list.length ? `<div class="tc-schools">${list.join(", ")}</div>` : ""}
+      </div>`;
+  });
+  html += `</div>`;
+  if (auto.length > 0) html += `<div class="auto-row"><b>자동배정 없음(직접 선택):</b> ${auto.join(", ")}</div>`;
+  return html;
+}
+
+async function renderSessionGrid() {
+  await loadConfigs();
+  checkStorageStatus();
+  const grid = document.getElementById("session-grid");
+  grid.innerHTML = "";
+  for (const s of SESSION_META) {
+    const total = SESSION_TOTALS[s.id];
+    const locked = isSessionLocked(s.id);
+    const state = await getState("session_state:" + s.id, emptySessionState(), true);
+    const active = activeTotalOf(state);
+    const card = document.createElement("button");
+    card.className = "session-card" + (locked ? " locked" : "");
+    card.innerHTML = `
+      <div class="date">${s.date}</div>
+      <div class="ampm">${s.ampm}</div>
+      <div class="count mono">정원 <b>${total.toLocaleString()}</b>명 · 신청 <b>${active.toLocaleString()}</b>명</div>
+      ${locked ? `<div class="locked-badge">마감되었습니다 (${fmtDeadline(s.id)} 마감)</div>` : ""}
+      ${scheduleHtmlForSession(s.id)}
+    `;
+    card.onclick = () => selectSession(s.id);
+    grid.appendChild(card);
+  }
+}
+
+async function checkStorageStatus() {
+  const box = document.getElementById("storage-status");
+  if (storageBackend === "firebase") {
+    try {
+      const testVal = "ok-" + Date.now();
+      await fsSetRaw("__healthcheck__", testVal);
+      const r = await fsGetRaw("__healthcheck__");
+      if (r === testVal) {
+        box.className = "storage-status ok";
+        box.textContent = "🟢 Firebase 연결됨 — 독립 배포 상태로 모든 접속자의 신청이 함께 수합됩니다";
+        return;
+      }
+      throw new Error("mismatch");
+    } catch (e) {
+      box.className = "storage-status bad";
+      box.textContent = "🔴 Firebase 연결 실패 — firebaseConfig 값을 다시 확인해 주세요 (Firestore 규칙/키 오류 가능)";
+      return;
+    }
+  }
+  try {
+    if (!window.storage) throw new Error("no-storage");
+    const testVal = "ok-" + Date.now();
+    await window.storage.set("__healthcheck__", testVal, true);
+    const r = await window.storage.get("__healthcheck__", true);
+    if (r && r.value === testVal) {
+      box.className = "storage-status ok";
+      box.textContent = "🟡 Claude 미리보기 저장소 연결됨 — Firebase 설정을 추가하면 독립 배포가 가능합니다";
+    } else { throw new Error("mismatch"); }
+  } catch (e) {
+    box.className = "storage-status bad";
+    box.textContent = "🔴 공유 저장소 미연결 — 로컬 임시 저장 모드입니다 (다른 사람과 데이터가 합쳐지지 않습니다)";
+  }
+}
+
+function selectSession(id) {
+  if (isSessionLocked(id)) { alert("🔴 마감되었습니다. 이 세션은 더 이상 신청할 수 없습니다."); return; }
+  currentSession = id;
+  const s = sessionMeta(id);
+  document.getElementById("register-session-label").textContent =
+    `${s.date} ${s.ampm} 세션으로 등록합니다. 학교·학년·반·이름을 입력한 뒤, 원하는 타임과 프로그램을 직접 선택합니다.`;
+  showView("register");
+}
+
+/* ---------------- STEP2: 기본 정보 입력 ---------------- */
+async function submitRegistration() {
+  const school = document.getElementById("input-school").value.trim();
+  const grade = document.getElementById("input-grade").value.trim();
+  const classNo = document.getElementById("input-classno").value.trim();
+  const name = document.getElementById("input-name").value.trim();
+  if (!school || !grade || !classNo || !name) { toast("학교명·학년·반·이름을 모두 입력해 주세요"); return; }
+
+  await loadConfigs();
+  if (isSessionLocked(currentSession)) { alert("🔴 마감되었습니다. 이 세션은 더 이상 신청할 수 없습니다."); return; }
+
+  const total = SESSION_TOTALS[currentSession] || DEFAULT_SESSION_TOTALS[currentSession] || 900;
+  const state = await getState("session_state:" + currentSession, emptySessionState(), true);
+  if (activeTotalOf(state) >= total) {
+    alert(`🔴 마감되었습니다. 이 세션은 정원(${total}명)이 모두 찼습니다.`);
+    return;
+  }
+
+  pending = { school, grade, classNo, name };
+
+  const fixedTime = (SESSION_SCHOOL_TIMES[currentSession] || {})[school];
+  if (fixedTime) {
+    pending.time = fixedTime;
+    renderAssignedBanner();
+    await refreshProgramGrid();
+    showView("boothselect");
+  } else {
+    await refreshTimeGrid();
+    showView("timeselect");
+  }
+}
+
+/* ---------------- STEP3: 타임 직접 선택 ---------------- */
+async function refreshTimeGrid() {
+  const grid = document.getElementById("time-pick-grid");
+  grid.innerHTML = `<div class="loading">불러오는 중…</div>`;
+  await loadConfigs();
+  const state = await getState("session_state:" + currentSession, emptySessionState(), true);
+  const cap = timeCapOf(currentSession);
+  grid.innerHTML = "";
+  for (let t = 1; t <= 4; t++) {
+    const count = state.groups[GROUPS[t - 1]] || 0;
+    const full = count >= cap;
+    const btn = document.createElement("button");
+    btn.className = "time-pick-card";
+    btn.style.background = LINE_COLORS[t].replace("var(", "").replace(")", "");
+    btn.style.background = getComputedStyle(document.documentElement).getPropertyValue("--line-" + t);
+    btn.disabled = full;
+    btn.innerHTML = `
+      <div class="tp-num">${t}</div>
+      <div class="tp-lbl">${t}타임</div>
+      <div class="tp-cap">${count} / ${cap}명</div>
+      ${full ? `<div class="tp-full">마감</div>` : ""}
+    `;
+    btn.onclick = () => pickTime(t, full);
+    grid.appendChild(btn);
+  }
+}
+function pickTime(t, full) {
+  if (full) { alert("🔴 마감되었습니다. 이 타임은 정원이 모두 찼습니다."); return; }
+  pending.time = t;
+  renderAssignedBanner();
+  refreshProgramGrid();
+  showView("boothselect");
+}
+
+function renderAssignedBanner() {
+  const s = sessionMeta(currentSession);
+  const lineColor = LINE_COLORS[pending.time];
+  document.getElementById("assigned-banner-box").innerHTML = `
+    <div class="assigned-banner" style="background:${lineColor}">
+      <div class="time-num">${pending.time}</div>
+      <div class="detail">
+        <div class="t1">${s.date} ${s.ampm} · ${pending.school} ${pending.grade}학년 ${pending.classNo}반 ${pending.name}</div>
+        <div class="t2">${pending.time}타임 선택됨 (나머지 3개 타임은 자율 참여)</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------- STEP4: 프로그램 직접 선택 ---------------- */
+async function refreshProgramGrid() {
+  if (!pending) return;
+  const grid = document.getElementById("program-grid");
+  grid.innerHTML = `<div class="loading">불러오는 중…</div>`;
+  await loadConfigs();
+  const state = await getState("session_state:" + currentSession, emptySessionState(), true);
+  const group = GROUPS[pending.time - 1];
+  const counts = state.boothCounts[group] || {};
+
+  grid.innerHTML = "";
+  for (let b = 1; b <= BOOTH_COUNT; b++) {
+    const cfg = BOOTH_CONFIG[b] || { name: `프로그램${b}`, capacity: 18 };
+    const count = counts[b] || 0;
+    const full = count >= cfg.capacity;
+    const pct = Math.min(100, Math.round((count / cfg.capacity) * 100));
+    let barColor = "var(--ok)";
+    if (pct >= 100) barColor = "var(--danger)"; else if (pct >= 80) barColor = "var(--warn)";
+
+    const card = document.createElement("button");
+    card.className = "program-card";
+    card.disabled = full;
+    card.innerHTML = `
+      ${full ? '<div class="pfull">마감</div>' : ''}
+      <div class="pname">${cfg.name}</div>
+      <div class="pcap mono">${count} / ${cfg.capacity}명</div>
+      <div class="pbar"><div class="pbar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+    `;
+    card.onclick = () => finalizeBoothSelection(b);
+    grid.appendChild(card);
+  }
+}
+
+async function finalizeBoothSelection(boothNum) {
+  const result = await registerOneStudent(currentSession, pending.school, pending.grade, pending.classNo, pending.name, pending.time, boothNum);
+  if (!result.ok) {
+    if (result.reason === "session_full") alert("🔴 마감되었습니다. 세션 정원이 모두 찼습니다.");
+    else if (result.reason === "time_full") { alert("🔴 마감되었습니다. 이 타임은 정원이 모두 찼습니다. 다른 타임을 선택해 주세요."); showView("timeselect"); await refreshTimeGrid(); }
+    else { alert("🔴 마감되었습니다. 방금 이 프로그램의 정원이 다 찼습니다. 다른 프로그램을 선택해 주세요."); await refreshProgramGrid(); }
+    return;
+  }
+  renderTicket(result.record);
+  pending = null;
+  showView("ticket");
+}
+
+/* ---------------- 티켓 렌더링 ---------------- */
+function renderTicket(r) {
+  const s = sessionMeta(r.session);
+  const lineColor = LINE_COLORS[r.time];
+  const cancelled = r.status === "cancelled";
+  let timelineRows = "";
+  for (let t = 1; t <= 4; t++) {
+    const isReserved = t === r.time;
+    timelineRows += `
+      <div class="tl-row ${isReserved ? "reserved" : ""}">
+        <div class="tl-dot" style="background:${LINE_COLORS[t]}"></div>
+        <div class="tl-time mono">${t}타임</div>
+        <div class="tl-desc">${isReserved ? `${r.boothName}${cancelled ? " (취소됨)" : " (예약)"}` : "자율 부스 자유 참여"}</div>
+      </div>`;
+  }
+
+  const locked = isSessionLocked(r.session);
+  let cancelSection = "";
+  if (cancelled) {
+    cancelSection = `<div class="cancel-box"><span class="cancel-badge">취소된 예약입니다</span></div>`;
+  } else if (locked) {
+    cancelSection = `<div class="cancel-box note-box" style="margin:0;">🔴 마감되었습니다 (마감일시: ${fmtDeadline(r.session)}). 더 이상 취소할 수 없습니다.</div>`;
+  } else {
+    cancelSection = `<div class="cancel-box"><button class="btn-danger" onclick="cancelReservationFlow('${r.id}')">이 예약 취소하기</button></div>`;
+  }
+
+  document.getElementById("ticket-container").innerHTML = `
+    <div class="ticket-head">
+      <div>
+        <div class="school">${r.school}</div>
+        <div class="name">${r.name}</div>
+        <div class="gradeclass">${r.grade}학년 ${r.classNo}반</div>
+        ${cancelled ? '<span class="cancel-badge">취소됨</span>' : ""}
+      </div>
+      <div class="resid"><div class="k">예약번호</div><div class="v">${r.id}</div></div>
+    </div>
+    <div class="ticket-body">
+      <div class="assigned-banner" style="background:${lineColor}">
+        <div class="time-num">${r.time}</div>
+        <div class="detail">
+          <div class="t1">${s.date} ${s.ampm} · ${r.time}타임 예약</div>
+          <div class="t2">${r.boothName}</div>
+        </div>
+      </div>
+    </div>
+    <div class="timeline">${timelineRows}</div>
+    ${cancelSection}
+    <div class="note-box">
+      예약번호를 캡처해 두면 '내 예약' 메뉴에서 다시 조회·취소할 수 있습니다.
+      예약 타임 외 나머지 3개 타임은 자율 부스를 원하는 순서로 자유롭게 둘러보시면 됩니다.
+    </div>
+  `;
+  document.getElementById("ticket-container").classList.toggle("cancelled", cancelled);
+}
+
+/* ---------------- 예약 조회 / 취소 ---------------- */
+function switchLookupTab(which) {
+  document.getElementById("tab-byid").classList.toggle("active", which === "byid");
+  document.getElementById("tab-byname").classList.toggle("active", which === "byname");
+  document.getElementById("pane-byid").classList.toggle("active", which === "byid");
+  document.getElementById("pane-byname").classList.toggle("active", which === "byname");
+  document.getElementById("lookup-result").innerHTML = "";
+}
+
+async function doFindByName() {
+  const school = document.getElementById("find-school").value.trim();
+  const grade = document.getElementById("find-grade").value.trim();
+  const classNo = document.getElementById("find-classno").value.trim();
+  const name = document.getElementById("find-name").value.trim();
+  const box = document.getElementById("lookup-result");
+  if (!school || !name) { toast("학교명과 이름은 필수로 입력해 주세요"); return; }
+
+  box.innerHTML = `<div class="loading">찾는 중…</div>`;
+  await loadConfigs();
+  let matches = [];
+  for (const s of SESSION_META) {
+    const agg = await getState("session_reservations:" + s.id, {}, true);
+    Object.values(agg).forEach(r => {
+      const sameSchool = r.school.trim() === school;
+      const sameName = r.name.trim() === name;
+      const sameGrade = !grade || r.grade === grade;
+      const sameClass = !classNo || r.classNo === classNo;
+      if (sameSchool && sameName && sameGrade && sameClass) matches.push(r);
+    });
+  }
+  matches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (matches.length === 0) {
+    box.innerHTML = `<div class="empty-msg">일치하는 예약을 찾을 수 없습니다. 학교명·이름 철자를 확인해 주세요</div>`;
+    return;
+  }
+  if (matches.length === 1) {
+    renderTicket(matches[0]);
+    box.innerHTML = `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
+    return;
+  }
+  let html = `<div class="settings-hint">${matches.length}건이 검색되었습니다. 확인할 예약을 선택하세요.</div>`;
+  matches.forEach((r, idx) => {
+    const s = sessionMeta(r.session);
+    html += `
+      <button class="match-item" onclick="showMatchTicket(${idx})">
+        <div class="m-top">${s.date} ${s.ampm} · ${r.time}타임 · ${r.boothName}</div>
+        <div class="m-sub">${r.school} ${r.grade}학년 ${r.classNo}반 ${r.name} · ${r.id}</div>
+        <div class="m-status ${r.status === "cancelled" ? "cancelled" : "active"}">${r.status === "cancelled" ? "취소됨" : "참여 예정"}</div>
+      </button>`;
+  });
+  box.innerHTML = html;
+  window.__matchResults = matches;
+}
+function showMatchTicket(idx) {
+  const r = window.__matchResults[idx];
+  renderTicket(r);
+  document.getElementById("lookup-result").innerHTML =
+    `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
+}
+
+async function doLookup() {
+  const id = document.getElementById("lookup-input").value.trim().toUpperCase();
+  const box = document.getElementById("lookup-result");
+  if (!id) { toast("예약번호를 입력해 주세요"); return; }
+  box.innerHTML = `<div class="loading">조회 중…</div>`;
+  await loadConfigs();
+  const record = await getState("reservation:" + id, null, true);
+  if (!record) { box.innerHTML = `<div class="empty-msg">해당 예약번호를 찾을 수 없습니다</div>`; return; }
+  renderTicket(record);
+  box.innerHTML = `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
+}
+
+async function cancelReservationFlow(resId) {
+  const record = await getState("reservation:" + resId, null, true);
+  if (!record) { toast("예약 정보를 찾을 수 없습니다"); return; }
+  if (record.status === "cancelled") { toast("이미 취소된 예약입니다"); return; }
+  await loadConfigs();
+  if (isSessionLocked(record.session)) { alert("🔴 마감되었습니다. 이 세션은 더 이상 취소할 수 없습니다."); return; }
+  if (!confirm(`${record.school} ${record.name} 학생의 예약을 취소하시겠습니까?\n(${record.boothName}, ${record.time}타임)`)) return;
+
+  record.status = "cancelled";
+  record.cancelledAt = Date.now();
+  await setState("reservation:" + resId, record, true);
+
+  const key = "session_state:" + record.session;
+  const state = await getState(key, emptySessionState(), true);
+  if (state.groups[record.group] > 0) state.groups[record.group] -= 1;
+  if (state.boothCounts[record.group] && state.boothCounts[record.group][record.booth] > 0) state.boothCounts[record.group][record.booth] -= 1;
+  state.cancelledCount = (state.cancelledCount || 0) + 1;
+  await setState(key, state, true);
+
+  const aggKey = "session_reservations:" + record.session;
+  const agg = await getState(aggKey, {}, true);
+  agg[resId] = record;
+  await setState(aggKey, agg, true);
+
+  toast("예약이 취소되었습니다");
+  renderTicket(record);
+  const lookupBox = document.getElementById("lookup-result");
+  if (lookupBox && lookupBox.innerHTML.includes(resId)) {
+    lookupBox.innerHTML = `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
+  }
+}
+
+/* ---------------- 선생님용 일괄 등록 ---------------- */
+function initTeacherView() {
+  const sel = document.getElementById("t-session");
+  sel.innerHTML = `<option value="">세션을 선택하세요</option>` +
+    SESSION_META.map(s => `<option value="${s.id}">${s.date} ${s.ampm}</option>`).join("");
+  document.getElementById("t-time-field").style.display = "none";
+  document.getElementById("t-program-field").style.display = "none";
+  document.getElementById("teacher-result").innerHTML = "";
+}
+
+async function onTeacherSessionChange() {
+  const sessionId = document.getElementById("t-session").value;
+  const school = document.getElementById("t-school").value.trim();
+  if (!sessionId) {
+    document.getElementById("t-time-field").style.display = "none";
+    document.getElementById("t-program-field").style.display = "none";
+    return;
+  }
+  await loadConfigs();
+  const fixedTime = school ? (SESSION_SCHOOL_TIMES[sessionId] || {})[school] : null;
+  const timeField = document.getElementById("t-time-field");
+  const note = document.getElementById("t-time-fixed-note");
+  timeField.style.display = "block";
+
+  if (fixedTime) {
+    note.textContent = `이 학교는 관리자 설정에 따라 ${fixedTime}타임으로 고정되어 있습니다.`;
+    document.getElementById("t-time-grid").innerHTML = "";
+    window.__teacherFixedTime = fixedTime;
+  } else {
+    note.textContent = "";
+    window.__teacherFixedTime = null;
+    await renderTeacherTimeGrid(sessionId);
+  }
+  await renderTeacherProgramSelect(sessionId, window.__teacherFixedTime);
+  document.getElementById("t-program-field").style.display = "block";
+}
+
+async function renderTeacherTimeGrid(sessionId) {
+  const grid = document.getElementById("t-time-grid");
+  grid.innerHTML = `<div class="loading">불러오는 중…</div>`;
+  const state = await getState("session_state:" + sessionId, emptySessionState(), true);
+  const cap = timeCapOf(sessionId);
+  grid.innerHTML = "";
+  for (let t = 1; t <= 4; t++) {
+    const count = state.groups[GROUPS[t - 1]] || 0;
+    const full = count >= cap;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "time-pick-card";
+    btn.style.background = getComputedStyle(document.documentElement).getPropertyValue("--line-" + t);
+    btn.disabled = full;
+    btn.innerHTML = `
+      <div class="tp-num">${t}</div>
+      <div class="tp-lbl">${t}타임</div>
+      <div class="tp-cap">${count} / ${cap}명</div>
+      ${full ? `<div class="tp-full">마감</div>` : ""}
+    `;
+    btn.onclick = () => {
+      window.__teacherChosenTime = t;
+      Array.from(grid.children).forEach(c => c.style.outline = "");
+      btn.style.outline = "3px solid var(--ink)";
+    };
+    grid.appendChild(btn);
+  }
+}
+
+async function renderTeacherProgramSelect(sessionId, fixedTime) {
+  const sel = document.getElementById("t-program");
+  const time = fixedTime || window.__teacherChosenTime || 1;
+  const group = GROUPS[time - 1];
+  const state = await getState("session_state:" + sessionId, emptySessionState(), true);
+  const counts = state.boothCounts[group] || {};
+  let html = "";
+  for (let b = 1; b <= BOOTH_COUNT; b++) {
+    const cfg = BOOTH_CONFIG[b];
+    const count = counts[b] || 0;
+    const remain = cfg.capacity - count;
+    html += `<option value="${b}" ${remain <= 0 ? "disabled" : ""}>${cfg.name} (여유 ${Math.max(0, remain)}명)${remain <= 0 ? " - 마감" : ""}</option>`;
+  }
+  sel.innerHTML = html;
+}
+
+function handleTeacherExcel(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      const lines = rows.map(row => {
+        const grade = row["학년"] ?? row["grade"] ?? "";
+        const classNo = row["반"] ?? row["class"] ?? "";
+        const name = row["이름"] ?? row["name"] ?? "";
+        return `${grade},${classNo},${name}`;
+      }).filter(l => l.replace(/,/g, "").trim().length > 0);
+      document.getElementById("t-students").value = lines.join("\n");
+      toast(`${lines.length}명 불러왔습니다. 내용을 확인한 뒤 일괄 등록을 눌러주세요`);
+    } catch (err) {
+      toast("엑셀 파일을 읽지 못했습니다. 학년/반/이름 열이 있는지 확인해 주세요");
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function submitTeacherBatch() {
+  const school = document.getElementById("t-school").value.trim();
+  const sessionId = document.getElementById("t-session").value;
+  const raw = document.getElementById("t-students").value;
+  const boothNum = parseInt(document.getElementById("t-program").value, 10);
+  const time = window.__teacherFixedTime || window.__teacherChosenTime;
+
+  if (!school) { toast("학교명을 입력해 주세요"); return; }
+  if (!sessionId) { toast("세션을 선택해 주세요"); return; }
+  if (!time) { toast("타임을 선택해 주세요"); return; }
+  if (!boothNum) { toast("프로그램을 선택해 주세요"); return; }
+
+  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) { toast("등록할 학생 명단을 입력하거나 엑셀을 업로드해 주세요"); return; }
+
+  await loadConfigs();
+  if (isSessionLocked(sessionId)) { alert("🔴 마감되었습니다. 이 세션은 더 이상 신청할 수 없습니다."); return; }
+
+  const results = { ok: [], fail: [] };
+  for (const line of lines) {
+    const parts = line.split(",").map(x => x.trim());
+    if (parts.length < 3 || !parts[2]) { results.fail.push({ line, reason: "형식 오류 (학년,반,이름)" }); continue; }
+    const [grade, classNo, name] = parts;
+    const r = await registerOneStudent(sessionId, school, grade, classNo, name, time, boothNum);
+    if (r.ok) {
+      results.ok.push(r.record);
+    } else {
+      const reasonText = r.reason === "session_full" ? "세션 정원 마감"
+        : r.reason === "time_full" ? "타임 정원 마감"
+        : "프로그램 정원 마감";
+      results.fail.push({ line, reason: reasonText });
+      if (r.reason === "session_full" || r.reason === "time_full") break; // 더 시도해도 소용없음
+    }
+  }
+
+  let html = `<div class="teacher-result">`;
+  html += `<div class="r-ok">✅ 등록 성공 ${results.ok.length}명</div>`;
+  results.ok.forEach(r => { html += `<div class="r-row"><span>${r.grade}학년 ${r.classNo}반 ${r.name}</span><span>${r.id}</span></div>`; });
+  if (results.fail.length > 0) {
+    html += `<div class="r-fail">⚠ 등록 실패 ${results.fail.length}건</div>`;
+    results.fail.forEach(f => { html += `<div class="r-row"><span>${f.line}</span><span>${f.reason}</span></div>`; });
+  }
+  html += `</div>`;
+  document.getElementById("teacher-result").innerHTML = html;
+
+  if (results.fail.length === 0) toast(`${results.ok.length}명 등록 완료`);
+  else alert(`${results.ok.length}명 등록 완료, ${results.fail.length}건 실패했습니다. 아래 결과를 확인해 주세요.`);
+
+  await renderTeacherTimeGrid(sessionId);
+  await renderTeacherProgramSelect(sessionId, window.__teacherFixedTime);
+}
+
+/* ---------------- 관리자: 비밀번호 게이트 + 설정 패널 ---------------- */
+function requireAdmin(onOk) {
+  if (isAdminAuthed) { onOk(); return; }
+  const input = prompt("관리자 비밀번호를 입력하세요");
+  if (input === null) return;
+  if (input !== ADMIN_PASSWORD) { toast("비밀번호가 올바르지 않습니다"); return; }
+  isAdminAuthed = true;
+  onOk();
+}
+
+function flashSaveConfirm(btn) {
+  const span = document.createElement("span");
+  span.className = "save-confirm show";
+  span.textContent = "✅ 저장되었습니다";
+  btn.insertAdjacentElement("afterend", span);
+  setTimeout(() => { span.classList.remove("show"); setTimeout(() => span.remove(), 300); }, 2000);
+}
+
+function toggleSettings(which) {
+  const body = document.getElementById("settings-" + which);
+  const arrow = document.getElementById(which + "-arrow");
+  if (body.classList.contains("open")) { body.classList.remove("open"); arrow.textContent = "▸"; return; }
+  requireAdmin(() => {
+    body.classList.add("open"); arrow.textContent = "▾";
+    if (which === "sess") renderSessSettings();
+    if (which === "schools") renderSchoolsSettings();
+    if (which === "booth") renderBoothSettings();
+    if (which === "pw") renderPwSettings();
+  });
+}
+
+function renderSessSettings() {
+  const box = document.getElementById("settings-sess");
+  let html = `<div class="settings-hint">마감일시를 비워두면 상시 신청/취소가 가능합니다. 타임별 정원은 인원 ÷ 4로 자동 계산됩니다.</div>`;
+  SESSION_META.forEach(s => {
+    const dl = SESSION_DEADLINES[s.id] || "";
+    html += `
+      <div class="setting-row">
+        <div class="s-label">${s.date} ${s.ampm}</div>
+        <input type="number" id="sess-input-${s.id}" value="${SESSION_TOTALS[s.id]}" min="1">
+        <span style="font-size:12px;color:var(--ink-soft)">명</span>
+        <input type="datetime-local" id="sess-deadline-${s.id}" value="${dl}">
+      </div>`;
+  });
+  html += `<button class="settings-save" id="save-sess-btn" onclick="saveSessSettings()">저장</button>`;
+  box.innerHTML = html;
+}
+async function saveSessSettings() {
+  const updatedTotals = {}; const updatedDeadlines = {};
+  SESSION_META.forEach(s => {
+    const v = parseInt(document.getElementById("sess-input-" + s.id).value, 10);
+    updatedTotals[s.id] = isNaN(v) || v < 1 ? SESSION_TOTALS[s.id] : v;
+    const dv = document.getElementById("sess-deadline-" + s.id).value;
+    if (dv) updatedDeadlines[s.id] = dv;
+  });
+  await setState("session_totals_config", updatedTotals, true);
+  await setState("session_deadline_config", updatedDeadlines, true);
+  SESSION_TOTALS = updatedTotals; SESSION_DEADLINES = updatedDeadlines;
+  toast("✅ 세션 인원 · 마감일시가 저장되었습니다");
+  flashSaveConfirm(document.getElementById("save-sess-btn"));
+  await renderSessionGrid();
+  loadAdmin();
+}
+
+function renderSchoolsSettings() {
+  const box = document.getElementById("settings-schools");
+  let html = `<div class="settings-hint">한 줄에 학교 하나씩, "학교명,타임(1~4)" 형식으로 입력하세요. 타임을 비우면 학생이 직접 선택합니다. 예) 내동중,1</div>`;
+  SESSION_META.forEach(s => {
+    const schools = SESSION_SCHOOLS[s.id] || [];
+    const timeMap = SESSION_SCHOOL_TIMES[s.id] || {};
+    const lines = schools.map(name => timeMap[name] ? `${name},${timeMap[name]}` : name).join("\n");
+    html += `
+      <div class="setting-row">
+        <div class="s-label">${s.date} ${s.ampm}</div>
+        <textarea id="schools-input-${s.id}">${lines}</textarea>
+      </div>`;
+  });
+  html += `<button class="settings-save" id="save-schools-btn" onclick="saveSchoolsSettings()">저장</button>`;
+  box.innerHTML = html;
+}
+async function saveSchoolsSettings() {
+  const updatedSchools = {}; const updatedTimes = {};
+  SESSION_META.forEach(s => {
+    const raw = document.getElementById("schools-input-" + s.id).value;
+    const names = []; const timeMap = {};
+    raw.split("\n").map(x => x.trim()).filter(Boolean).forEach(line => {
+      const parts = line.split(",").map(x => x.trim());
+      const name = parts[0];
+      const t = parseInt(parts[1], 10);
+      names.push(name);
+      if (!isNaN(t) && t >= 1 && t <= 4) timeMap[name] = t;
+    });
+    updatedSchools[s.id] = names;
+    updatedTimes[s.id] = timeMap;
+  });
+  await setState("session_schools_config", updatedSchools, true);
+  await setState("session_school_times_config", updatedTimes, true);
+  SESSION_SCHOOLS = updatedSchools; SESSION_SCHOOL_TIMES = updatedTimes;
+  toast("✅ 참여 학교 목록 · 타임 배정이 저장되었습니다");
+  flashSaveConfirm(document.getElementById("save-schools-btn"));
+  await renderSessionGrid();
+}
+
+function renderBoothSettings() {
+  const box = document.getElementById("settings-booth");
+  let html = "";
+  for (let b = 1; b <= BOOTH_COUNT; b++) {
+    const cfg = BOOTH_CONFIG[b];
+    html += `
+      <div class="setting-row">
+        <div class="s-label mono">#${b}</div>
+        <input type="text" id="booth-name-${b}" value="${cfg.name}" placeholder="프로그램명">
+        <input type="number" id="booth-cap-${b}" value="${cfg.capacity}" min="1" max="40">
+      </div>`;
+  }
+  html += `<button class="settings-save" id="save-booth-btn" onclick="saveBoothSettings()">저장</button>`;
+  box.innerHTML = html;
+}
+async function saveBoothSettings() {
+  const updated = {};
+  for (let b = 1; b <= BOOTH_COUNT; b++) {
+    const nameEl = document.getElementById("booth-name-" + b);
+    const capEl = document.getElementById("booth-cap-" + b);
+    const name = nameEl.value.trim() || BOOTH_CONFIG[b].name;
+    const cap = parseInt(capEl.value, 10);
+    updated[b] = { name, capacity: isNaN(cap) || cap < 1 ? BOOTH_CONFIG[b].capacity : cap };
+  }
+  await setState("booth_config", updated, true);
+  BOOTH_CONFIG = updated;
+  toast("✅ 프로그램명 · 정원이 저장되었습니다");
+  flashSaveConfirm(document.getElementById("save-booth-btn"));
+  loadAdmin();
+}
+
+function renderPwSettings() {
+  const box = document.getElementById("settings-pw");
+  box.innerHTML = `
+    <div class="settings-hint">현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다.</div>
+    <div class="setting-row"><div class="s-label">현재 비밀번호</div><input type="password" id="pw-current"></div>
+    <div class="setting-row"><div class="s-label">새 비밀번호</div><input type="password" id="pw-new"></div>
+    <div class="setting-row"><div class="s-label">새 비밀번호 확인</div><input type="password" id="pw-new2"></div>
+    <button class="settings-save" id="save-pw-btn" onclick="changeAdminPassword()">변경</button>
+  `;
+}
+async function changeAdminPassword() {
+  const cur = document.getElementById("pw-current").value;
+  const n1 = document.getElementById("pw-new").value;
+  const n2 = document.getElementById("pw-new2").value;
+  if (cur !== ADMIN_PASSWORD) { toast("현재 비밀번호가 올바르지 않습니다"); return; }
+  if (!n1 || n1.length < 4) { toast("새 비밀번호는 4자 이상으로 설정해 주세요"); return; }
+  if (n1 !== n2) { toast("새 비밀번호가 서로 일치하지 않습니다"); return; }
+  await setState("admin_password_config", n1, true);
+  ADMIN_PASSWORD = n1;
+  toast("✅ 비밀번호가 변경되었습니다");
+  flashSaveConfirm(document.getElementById("save-pw-btn"));
+  document.getElementById("pw-current").value = "";
+  document.getElementById("pw-new").value = "";
+  document.getElementById("pw-new2").value = "";
+}
+
+/* ---------------- 관리자: 엑셀 다운로드 ---------------- */
+async function exportExcel() {
+  requireAdmin(async () => {
+    toast("엑셀 파일을 만드는 중…");
+    await loadConfigs();
+    const rows = [];
+    for (const s of SESSION_META) {
+      const agg = await getState("session_reservations:" + s.id, {}, true);
+      Object.values(agg).forEach(r => {
+        rows.push({
+          "세션": `${s.date} ${s.ampm}`,
+          "학교": r.school, "학년": r.grade, "반": r.classNo, "이름": r.name,
+          "타임": r.time, "프로그램": r.boothName,
+          "상태": r.status === "cancelled" ? "취소" : "참여",
+          "예약번호": r.id,
+          "신청시각": r.createdAt ? new Date(r.createdAt).toLocaleString("ko-KR") : "",
+          "취소시각": r.cancelledAt ? new Date(r.cancelledAt).toLocaleString("ko-KR") : "",
+        });
+      });
+    }
+    if (rows.length === 0) { toast("아직 등록된 예약이 없습니다"); return; }
+    if (typeof XLSX === "undefined") { toast("엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{wch:14},{wch:16},{wch:6},{wch:6},{wch:10},{wch:6},{wch:14},{wch:8},{wch:18},{wch:20},{wch:20}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "예약결과");
+    const today = new Date();
+    const fname = `진로박람회_예약결과_${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}.xlsx`;
+    XLSX.writeFile(wb, fname);
+    toast(`${rows.length}건 다운로드 완료`);
+  });
+}
+
+/* ---------------- 관리자: 현황판 ---------------- */
+function renderAdminTabs() {
+  const tabs = document.getElementById("admin-tabs");
+  tabs.innerHTML = "";
+  SESSION_META.forEach(s => {
+    const b = document.createElement("button");
+    b.className = "admin-tab" + (s.id === adminSession ? " active" : "");
+    b.textContent = `${s.date} ${s.ampm}`;
+    b.onclick = () => { adminSession = s.id; loadAdmin(); };
+    tabs.appendChild(b);
+  });
+}
+
+async function loadAdmin() {
+  await loadConfigs();
+  renderAdminTabs();
+  const content = document.getElementById("admin-content");
+  const summary = document.getElementById("admin-summary");
+  content.innerHTML = `<div class="loading">불러오는 중…</div>`;
+  const total = SESSION_TOTALS[adminSession];
+  const state = await getState("session_state:" + adminSession, emptySessionState(), true);
+  const active = activeTotalOf(state);
+  const cap = timeCapOf(adminSession);
+
+  summary.innerHTML = `
+    <div class="summary-strip">
+      <div class="summary-chip"><div class="k">정원 / 신청</div><div class="v mono">${total.toLocaleString()} / ${active.toLocaleString()}</div></div>
+      <div class="summary-chip"><div class="k">취소</div><div class="v mono">${state.cancelledCount || 0}</div></div>
+      <div class="summary-chip"><div class="k">1타임</div><div class="v mono">${state.groups.A}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">2타임</div><div class="v mono">${state.groups.B}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">3타임</div><div class="v mono">${state.groups.C}/${cap}</div></div>
+      <div class="summary-chip"><div class="k">4타임</div><div class="v mono">${state.groups.D}/${cap}</div></div>
+    </div>
+    ${SESSION_DEADLINES[adminSession] ? `<div class="settings-hint" style="margin-bottom:10px;">마감일시: ${fmtDeadline(adminSession)}</div>` : ""}
+  `;
+
+  let html = "";
+  for (let t = 1; t <= 4; t++) {
+    const g = GROUPS[t - 1];
+    html += `
+      <div class="group-block">
+        <div class="group-block-head" style="background:${LINE_COLORS[t]}">
+          <span>${t}타임</span><span class="mono">${state.groups[g]} / ${cap}</span>
+        </div>`;
+    for (let b = 1; b <= BOOTH_COUNT; b++) {
+      const cfg = BOOTH_CONFIG[b];
+      const count = (state.boothCounts[g] && state.boothCounts[g][b]) || 0;
+      const pct = Math.min(100, Math.round((count / cfg.capacity) * 100));
+      let barColor = "var(--ok)";
+      if (pct >= 100) barColor = "var(--danger)"; else if (pct >= 80) barColor = "var(--warn)";
+      html += `
+        <div class="booth-row">
+          <div class="bname">${cfg.name}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="bcount">${count} / ${cfg.capacity}</div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+  content.innerHTML = html;
+}
+
+/* ---------------- 초기화 ---------------- */
+renderSessionGrid();
+</script>
+</body>
+</html>
