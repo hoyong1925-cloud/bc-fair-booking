@@ -1190,6 +1190,7 @@ function toggleSettings(which) {
 function renderSessSettings() {
   const box = document.getElementById("settings-sess");
   let html = `<div class="settings-hint">마감일시를 비워두면 상시 신청/취소가 가능합니다. 타임별로 정원을 각각 설정할 수 있습니다.</div>`;
+  html += `<button type="button" class="btn-secondary" onclick="autofillFromBoothCapacity()">↻ 부스 정원 합계로 자동 채우기</button>`;
   DAYS.forEach(d => {
     html += `<div class="settings-subhead">${d.label}</div>`;
     SLOT_DEFS.forEach(t => {
@@ -1206,6 +1207,14 @@ function renderSessSettings() {
   });
   html += `<button class="settings-save" id="save-sess-btn" onclick="saveSessSettings()">저장</button>`;
   box.innerHTML = html;
+}
+function autofillFromBoothCapacity() {
+  SESSION_META.forEach(s => {
+    const sum = boothIds().reduce((total, b) => total + boothCapacity(b, s.id), 0);
+    const input = document.getElementById("sess-input-" + s.id);
+    if (input) input.value = sum;
+  });
+  toast("각 타임의 정원을 부스 정원 합계로 채웠습니다. 확인 후 저장을 눌러주세요");
 }
 async function saveSessSettings() {
   const updatedTotals = {}; const updatedDeadlines = {};
