@@ -691,7 +691,7 @@ async function renderSessionGrid() {
       const color = SLOT_COLORS[t.slot] || "#999";
       const schoolsHere = Object.keys(SCHOOL_SLOT).filter(name => SCHOOL_SLOT[name] === sId);
       html += `
-        <button class="slot-card${locked ? " locked" : ""}" style="border-color:${color}" onclick="selectSession('${sId}')">
+        <button class="slot-card${locked ? " locked" : ""}" style="border-color:${color};background:${color}22" onclick="selectSession('${sId}')">
           <span class="slot-badge" style="background:${color}">${t.slot}</span>
           <div class="slot-range mono">${t.range}</div>
           <div class="slot-count mono">${active} / ${total}명</div>
@@ -1198,7 +1198,7 @@ function renderSessSettings() {
       html += `
         <div class="setting-row">
           <div class="s-label">${t.slot}타임<br><span style="font-weight:400;font-size:10px;">${t.range}</span></div>
-          <input type="number" id="sess-input-${sId}" value="${SESSION_TOTALS[sId] ||
+          <input type="number" id="sess-input-${sId}" value="${SESSION_TOTALS[sId] || DEFAULT_SESSION_TOTALS[sId] || 0}" min="1">
           <span style="font-size:12px;color:var(--ink-soft)">명</span>
           <input type="datetime-local" id="sess-deadline-${sId}" value="${dl}">
         </div>`;
@@ -1476,7 +1476,7 @@ async function loadAdmin() {
   const summary = document.getElementById("admin-summary");
   content.innerHTML = `<div class="loading">불러오는 중…</div>`;
   const s = sessionMeta(adminSession);
-  const total = SESSION_TOTALS[adminSession] ||
+  const total = SESSION_TOTALS[adminSession] || DEFAULT_SESSION_TOTALS[adminSession] || 0;
   const state = await getState("session_state:" + adminSession, emptySessionState(), true);
   const active = state.activeCount || 0;
 
