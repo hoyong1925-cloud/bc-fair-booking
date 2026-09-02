@@ -448,6 +448,9 @@ function defaultBoothConfig() {
   return cfg;
 }
 const DEFAULT_ADMIN_PASSWORD = "0925";
+function boothIds() {
+  return Object.keys(BOOTH_CONFIG).map(Number).sort((a, b) => a - b);
+}
 
 /* ---------------- 전역 상태 ---------------- */
 let SESSION_TOTALS = { ...DEFAULT_SESSION_TOTALS };
@@ -509,7 +512,7 @@ async function setState(key, value, shared) {
 
 function emptySessionState() {
   const groups = {}; const boothCounts = {};
-  GROUPS.forEach(g => { groups[g] = 0; boothCounts[g] = {}; for (let b = 1; b <= BOOTH_COUNT; b++) boothCounts[g][b] = 0; });
+  GROUPS.forEach(g => { groups[g] = 0; boothCounts[g] = {}; boothIds().forEach(b => { boothCounts[g][b] = 0; }); });
   return { groups, boothCounts, cancelledCount: 0 };
 }
 
@@ -580,6 +583,7 @@ async function registerOneStudent(sessionId, school, grade, classNo, name, time,
   const tCap = timeCapOf(sessionId);
   if ((state.groups[group] || 0) >= tCap) return { ok: false, reason: "time_full" };
   const cfg = BOOTH_CONFIG[boothNum];
+  if (!cfg) return { ok: false, reason: "booth_full" }; // 이미 삭제된 프로그램
   const curBooth = (state.boothCounts[group] && state.boothCounts[group][boothNum]) || 0;
   if (curBooth >= cfg.capacity) return { ok: false, reason: "booth_full" };
 
@@ -666,8 +670,8 @@ async function checkStorageStatus() {
   if (storageBackend === "firebase") {
     try {
       const testVal = "ok-" + Date.now();
-      await fsSetRaw("__healthcheck__", testVal);
-      const r = await fsGetRaw("__healthcheck__");
+      await fsSetRaw("healthcheck_ping", testVal);
+      const r = await fsGetRaw("healthcheck_ping");
       if (r === testVal) {
         box.className = "storage-status ok";
         box.textContent = "🟢 Firebase 연결됨 — 독립 배포 상태로 모든 접속자의 신청이 함께 수합됩니다";
@@ -683,8 +687,8 @@ async function checkStorageStatus() {
   try {
     if (!window.storage) throw new Error("no-storage");
     const testVal = "ok-" + Date.now();
-    await window.storage.set("__healthcheck__", testVal, true);
-    const r = await window.storage.get("__healthcheck__", true);
+    await window.storage.set("healthcheck_ping", testVal, true);
+    const r = await window.storage.get("healthcheck_ping", true);
     if (r && r.value === testVal) {
       box.className = "storage-status ok";
       box.textContent = "🟡 Claude 미리보기 저장소 연결됨 — Firebase 설정을 추가하면 독립 배포가 가능합니다";
@@ -795,7 +799,7 @@ async function refreshProgramGrid() {
   const counts = state.boothCounts[group] || {};
 
   grid.innerHTML = "";
-  for (let b = 1; b <= BOOTH_COUNT; b++) {
+  boothIds().forEach(b => {
     const cfg = BOOTH_CONFIG[b] || { name: `프로그램${b}`, capacity: 18 };
     const count = counts[b] || 0;
     const full = count >= cfg.capacity;
@@ -814,7 +818,7 @@ async function refreshProgramGrid() {
     `;
     card.onclick = () => finalizeBoothSelection(b);
     grid.appendChild(card);
-  }
+  });
 }
 
 async function finalizeBoothSelection(boothNum) {
@@ -1063,12 +1067,12 @@ async function renderTeacherProgramSelect(sessionId, fixedTime) {
   const state = await getState("session_state:" + sessionId, emptySessionState(), true);
   const counts = state.boothCounts[group] || {};
   let html = "";
-  for (let b = 1; b <= BOOTH_COUNT; b++) {
+  boothIds().forEach(b => {
     const cfg = BOOTH_CONFIG[b];
     const count = counts[b] || 0;
     const remain = cfg.capacity - count;
     html += `<option value="${b}" ${remain <= 0 ? "disabled" : ""}>${cfg.name} (여유 ${Math.max(0, remain)}명)${remain <= 0 ? " - 마감" : ""}</option>`;
-  }
+  });
   sel.innerHTML = html;
 }
 
@@ -1253,33 +1257,54 @@ async function saveSchoolsSettings() {
   await renderSessionGrid();
 }
 
+function boothRowHtml(id, name, capacity) {
+  return `
+    <div class="setting-row booth-row-setting" data-booth-id="${id}">
+      <div class="s-label mono">#${id}</div>
+      <input type="text" class="booth-name-input" value="${name}" placeholder="프로그램명">
+      <input type="number" class="booth-cap-input" value="${capacity}" min="1" max="60">
+      <button type="button" class="btn-danger" style="width:auto;padding:6px 10px;margin:0;font-size:11px;flex-shrink:0;" onclick="removeBoothRow(this)">삭제</button>
+    </div>`;
+}
+function addBoothRow() {
+  const container = document.getElementById("booth-rows-container");
+  const existingIds = Array.from(container.querySelectorAll(".booth-row-setting")).map(el => parseInt(el.dataset.boothId, 10));
+  const newId = existingIds.length ? Math.max(...existingIds) + 1 : 1;
+  container.insertAdjacentHTML("beforeend", boothRowHtml(newId, "새 프로그램", 18));
+}
+function removeBoothRow(btn) {
+  const container = document.getElementById("booth-rows-container");
+  if (container.querySelectorAll(".booth-row-setting").length <= 1) {
+    toast("프로그램이 최소 1개는 있어야 합니다");
+    return;
+  }
+  if (!confirm("이 프로그램을 목록에서 삭제하시겠습니까? (저장을 눌러야 최종 반영됩니다)")) return;
+  btn.closest(".booth-row-setting").remove();
+}
+
 function renderBoothSettings() {
   const box = document.getElementById("settings-booth");
-  let html = "";
-  for (let b = 1; b <= BOOTH_COUNT; b++) {
-    const cfg = BOOTH_CONFIG[b];
-    html += `
-      <div class="setting-row">
-        <div class="s-label mono">#${b}</div>
-        <input type="text" id="booth-name-${b}" value="${cfg.name}" placeholder="프로그램명">
-        <input type="number" id="booth-cap-${b}" value="${cfg.capacity}" min="1" max="40">
-      </div>`;
-  }
+  let html = `<div class="settings-hint">프로그램을 추가하거나 삭제할 수 있습니다. 변경 후 반드시 저장을 눌러주세요.</div>`;
+  html += `<div id="booth-rows-container">`;
+  boothIds().forEach(b => { html += boothRowHtml(b, BOOTH_CONFIG[b].name, BOOTH_CONFIG[b].capacity); });
+  html += `</div>`;
+  html += `<button type="button" class="btn-secondary" onclick="addBoothRow()">+ 프로그램 추가</button>`;
   html += `<button class="settings-save" id="save-booth-btn" onclick="saveBoothSettings()">저장</button>`;
   box.innerHTML = html;
 }
 async function saveBoothSettings() {
+  const rows = document.querySelectorAll("#booth-rows-container .booth-row-setting");
   const updated = {};
-  for (let b = 1; b <= BOOTH_COUNT; b++) {
-    const nameEl = document.getElementById("booth-name-" + b);
-    const capEl = document.getElementById("booth-cap-" + b);
-    const name = nameEl.value.trim() || BOOTH_CONFIG[b].name;
-    const cap = parseInt(capEl.value, 10);
-    updated[b] = { name, capacity: isNaN(cap) || cap < 1 ? BOOTH_CONFIG[b].capacity : cap };
-  }
+  rows.forEach(row => {
+    const id = row.dataset.boothId;
+    const name = row.querySelector(".booth-name-input").value.trim() || `프로그램${id}`;
+    const cap = parseInt(row.querySelector(".booth-cap-input").value, 10);
+    updated[id] = { name, capacity: isNaN(cap) || cap < 1 ? 18 : cap };
+  });
+  if (Object.keys(updated).length === 0) { toast("프로그램이 최소 1개는 있어야 합니다"); return; }
   await setState("booth_config", updated, true);
   BOOTH_CONFIG = updated;
-  toast("✅ 프로그램명 · 정원이 저장되었습니다");
+  toast("✅ 프로그램 목록이 저장되었습니다");
   flashSaveConfirm(document.getElementById("save-booth-btn"));
   loadAdmin();
 }
@@ -1387,7 +1412,7 @@ async function loadAdmin() {
         <div class="group-block-head" style="background:${LINE_COLORS[t]}">
           <span>${t}타임</span><span class="mono">${state.groups[g]} / ${cap}</span>
         </div>`;
-    for (let b = 1; b <= BOOTH_COUNT; b++) {
+    boothIds().forEach(b => {
       const cfg = BOOTH_CONFIG[b];
       const count = (state.boothCounts[g] && state.boothCounts[g][b]) || 0;
       const pct = Math.min(100, Math.round((count / cfg.capacity) * 100));
@@ -1399,7 +1424,7 @@ async function loadAdmin() {
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
           <div class="bcount">${count} / ${cfg.capacity}</div>
         </div>`;
-    }
+    });
     html += `</div>`;
   }
   content.innerHTML = html;
