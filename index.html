@@ -91,7 +91,9 @@
   .program-card { border: 1.5px solid var(--paper-dim); background: #fff; border-radius: var(--radius); padding: 13px 12px; cursor: pointer; text-align: left; font-family: inherit; position: relative; }
   .program-card:hover:not(:disabled) { border-color: var(--ink); }
   .program-card:disabled { opacity: 0.45; cursor: not-allowed; }
+  .program-card .pimage { width: 100%; height: 90px; object-fit: cover; border-radius: 3px; margin-bottom: 8px; background: var(--paper-dim); }
   .program-card .pname { font-size: 14px; font-weight: 800; }
+  .program-card .pdesc { font-size: 11px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
   .program-card .pcap { font-size: 11px; color: var(--ink-soft); margin-top: 6px; font-family: ui-monospace, monospace; }
   .program-card .pfull { position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 700; color: var(--danger); }
   .program-card .pbar { height: 5px; background: var(--paper-dim); border-radius: 3px; margin-top: 8px; overflow: hidden; }
@@ -200,8 +202,8 @@
     <div class="nav-btns">
       <button class="nav-btn" onclick="showView('landing')">홈</button>
       <button class="nav-btn" onclick="showView('lookup')">내 예약</button>
-      <button class="nav-btn" onclick="showView('teacher')">선생님용</button>
-      <button class="nav-btn" onclick="showView('admin')">현황판</button>
+      <button class="nav-btn" onclick="showView('teacher')">교사용</button>
+      <button class="nav-btn" onclick="showView('admin')">관리자모드</button>
     </div>
   </div>
 
@@ -225,18 +227,19 @@
     <button class="back-link" onclick="showView('landing')">← 타임 다시 선택</button>
     <h2 class="section-title">정보 입력 <span class="tag">STEP 2</span></h2>
     <p class="lead" id="register-session-label"></p>
-    <div class="field"><label>학교명</label><input type="text" id="input-school" placeholder="예: 가온고등학교"></div>
+    <div class="field"><label>학교명</label><input type="text" id="input-school" placeholder="예: 부천중"></div>
     <div class="field-row">
       <div class="field"><label>학년</label><input type="text" id="input-grade" placeholder="예: 2"></div>
       <div class="field"><label>반</label><input type="text" id="input-classno" placeholder="예: 3"></div>
     </div>
     <div class="field"><label>이름</label><input type="text" id="input-name" placeholder="예: 김도윤"></div>
+    <div class="field"><label>휴대폰번호</label><input type="text" id="input-phone" placeholder="예: 010-0000-0000" inputmode="numeric"></div>
     <button class="btn-primary" id="submit-btn" onclick="submitRegistration()">다음: 프로그램 선택</button>
   </section>
 
   <!-- ===================== PROGRAM SELECT ===================== -->
   <section id="view-boothselect">
-    <button class="back-link" onclick="showView('landing')">← 처음으로</button>
+    <button class="back-link" onclick="goBackToRegisterForm()">← 정보 수정하기</button>
     <h2 class="section-title">프로그램 선택 <span class="tag">STEP 3</span></h2>
     <div id="assigned-banner-box"></div>
     <p class="lead">이 타임에 참여할 프로그램을 하나 선택하세요. 정원이 찬 프로그램은 선택할 수 없습니다.</p>
@@ -270,7 +273,7 @@
     </div>
 
     <div class="lookup-pane" id="pane-byname">
-      <div class="field"><label>학교명</label><input type="text" id="find-school" placeholder="예: 가온고등학교"></div>
+      <div class="field"><label>학교명</label><input type="text" id="find-school" placeholder="예: 부천중"></div>
       <div class="field-row">
         <div class="field"><label>학년</label><input type="text" id="find-grade" placeholder="예: 2"></div>
         <div class="field"><label>반</label><input type="text" id="find-classno" placeholder="예: 3"></div>
@@ -285,10 +288,10 @@
   <!-- ===================== TEACHER MODE ===================== -->
   <section id="view-teacher">
     <button class="back-link" onclick="showView('landing')">← 처음으로</button>
-    <h2 class="section-title">선생님용 일괄 등록</h2>
+    <h2 class="section-title">교사용 일괄 등록</h2>
     <p class="lead">학교/타임/프로그램을 한 번만 정하면, 학생 명단을 한꺼번에 등록할 수 있습니다.</p>
 
-    <div class="field"><label>학교명</label><input type="text" id="t-school" placeholder="예: 가온고등학교" onblur="onTeacherContextChange()"></div>
+    <div class="field"><label>학교명</label><input type="text" id="t-school" placeholder="예: 부천중" onblur="onTeacherContextChange()"></div>
     <div class="field"><label>타임</label>
       <select id="t-session" onchange="onTeacherContextChange()">
         <option value="">타임을 선택하세요</option>
@@ -302,8 +305,8 @@
     </div>
 
     <div class="field">
-      <label>학생 명단 (한 줄에 한 명, "학년,반,이름" 형식 — 예: 2,3,김도윤)</label>
-      <textarea id="t-students" rows="6" placeholder="2,3,김도윤&#10;2,3,이서연&#10;2,4,박지훈"></textarea>
+      <label>학생 명단 (한 줄에 한 명, "학년,반,이름,휴대폰번호" 형식 — 예: 2,3,김도윤,01000000000)</label>
+      <textarea id="t-students" rows="6" placeholder="2,3,김도윤,01000000000&#10;2,3,이서연,01000000000&#10;2,4,박지훈,01000000000"></textarea>
     </div>
     <div class="field">
       <label>또는 엑셀 업로드 (학년/반/이름 열이 있는 파일)</label>
@@ -317,7 +320,7 @@
   <!-- ===================== ADMIN ===================== -->
   <section id="view-admin">
     <button class="back-link" onclick="showView('landing')">← 처음으로</button>
-    <h2 class="section-title">운영 설정 &amp; 현황판</h2>
+    <h2 class="section-title">관리자모드</h2>
 
     <div class="settings-panel">
       <div class="settings-head" onclick="toggleSettings('sess')">
@@ -453,7 +456,7 @@ function defaultBoothConfig() {
   const cfg = {};
   const capPerSlot = {};
   SESSION_META.forEach(s => { capPerSlot[s.id] = 18; });
-  for (let i = 1; i <= BOOTH_COUNT; i++) cfg[i] = { name: names[i] || `프로그램${i}`, capacity: { ...capPerSlot } };
+  for (let i = 1; i <= BOOTH_COUNT; i++) cfg[i] = { name: names[i] || `프로그램${i}`, description: "", image: "", capacity: { ...capPerSlot } };
   return cfg;
 }
 function boothIds() { return Object.keys(BOOTH_CONFIG).map(Number).sort((a, b) => a - b); }
@@ -554,6 +557,10 @@ function toast(msg) {
   setTimeout(() => t.classList.remove("show"), 2600);
 }
 function showView(name) {
+  if (name === "admin" && !isAdminAuthed) {
+    requireAdmin(() => { showView("admin"); });
+    return;
+  }
   document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
   document.getElementById("view-" + name).classList.add("active");
   if (name === "admin") loadAdmin();
@@ -576,6 +583,13 @@ function fmtDeadline(id) {
 }
 function schoolCode(school) {
   return (school || "학교").replace(/[\s,/\\'"]+/g, "").slice(0, 6) || "학교";
+}
+// 휴대폰번호 입력값을 010-0000-0000 형태로 정리
+function formatPhone(raw) {
+  const digits = (raw || "").replace(/[^0-9]/g, "");
+  if (digits.length === 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+  if (digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+  return (raw || "").trim();
 }
 function randSuffix(len) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -616,10 +630,9 @@ async function loadConfigs() {
 }
 
 /* ---------------- 핵심: 학생 1명 등록 ---------------- */
-async function registerOneStudent(sessionId, school, grade, classNo, name, boothNum) {
+async function registerOneStudent(sessionId, school, grade, classNo, name, phone, boothNum) {
   const total = SESSION_TOTALS[sessionId] || DEFAULT_SESSION_TOTALS[sessionId] || 220;
   const key = "session_state:" + sessionId;
-  const state = await getState(key, emptySessionState(), true);
 
   const aggKey = "session_reservations:" + sessionId;
   const aggForDup = await getState(aggKey, {}, true);
@@ -640,16 +653,46 @@ async function registerOneStudent(sessionId, school, grade, classNo, name, booth
     if (!assignedSlot && !knownForDay) return { ok: false, reason: "unknown_school" };
   }
 
-  if (state.activeCount >= total) return { ok: false, reason: "session_full" };
   const cfg = BOOTH_CONFIG[boothNum];
   if (!cfg) return { ok: false, reason: "booth_full" };
   const cap = boothCapacity(boothNum, sessionId);
-  const curBooth = state.boothCounts[boothNum] || 0;
-  if (curBooth >= cap) return { ok: false, reason: "booth_full" };
 
-  state.activeCount += 1;
-  state.boothCounts[boothNum] = curBooth + 1;
-  await setState(key, state, true);
+  // 정원 확인+증가는 반드시 원자적으로 처리 (동시에 여러 명이 신청해도 순서대로 안전하게 처리됨)
+  let capResult;
+  if (storageBackend === "firebase") {
+    try {
+      capResult = await fsDb.runTransaction(async (t) => {
+        const ref = fsDb.collection("kv").doc(key);
+        const doc = await t.get(ref);
+        const state = doc.exists ? JSON.parse(doc.data().value) : emptySessionState();
+        if (state.activeCount >= total) return { ok: false, reason: "session_full" };
+        const curBooth = state.boothCounts[boothNum] || 0;
+        if (curBooth >= cap) return { ok: false, reason: "booth_full" };
+        state.activeCount += 1;
+        state.boothCounts[boothNum] = curBooth + 1;
+        t.set(ref, { value: JSON.stringify(state), updatedAt: Date.now() });
+        memoryStore[key] = JSON.stringify(state);
+        return { ok: true };
+      });
+    } catch (e) {
+      console.error("정원 처리 트랜잭션 실패", e);
+      return { ok: false, reason: "booth_full" };
+    }
+  } else {
+    const state = await getState(key, emptySessionState(), true);
+    if (state.activeCount >= total) { capResult = { ok: false, reason: "session_full" }; }
+    else {
+      const curBooth = state.boothCounts[boothNum] || 0;
+      if (curBooth >= cap) { capResult = { ok: false, reason: "booth_full" }; }
+      else {
+        state.activeCount += 1;
+        state.boothCounts[boothNum] = curBooth + 1;
+        await setState(key, state, true);
+        capResult = { ok: true };
+      }
+    }
+  }
+  if (!capResult.ok) return capResult;
 
   const sCode = schoolCode(school);
   const seqKey = "school_seq:" + sessionId + ":" + sCode;
@@ -659,7 +702,7 @@ async function registerOneStudent(sessionId, school, grade, classNo, name, booth
 
   const record = {
     id: resId, session: sessionId,
-    school, grade, classNo, name,
+    school, grade, classNo, name, phone,
     booth: boothNum, boothName: cfg.name,
     status: "active", createdAt: Date.now(), cancelledAt: null
   };
@@ -747,7 +790,8 @@ async function submitRegistration() {
   const grade = document.getElementById("input-grade").value.trim();
   const classNo = document.getElementById("input-classno").value.trim();
   const name = document.getElementById("input-name").value.trim();
-  if (!school || !grade || !classNo || !name) { toast("학교명·학년·반·이름을 모두 입력해 주세요"); return; }
+  const phone = formatPhone(document.getElementById("input-phone").value.trim());
+  if (!school || !grade || !classNo || !name || !phone) { toast("학교명·학년·반·이름·휴대폰번호를 모두 입력해 주세요"); return; }
 
   await loadConfigs();
   if (isSessionLocked(currentSession)) { alert("🔴 마감되었습니다. 이 타임은 더 이상 신청할 수 없습니다."); return; }
@@ -788,15 +832,21 @@ async function submitRegistration() {
     return;
   }
 
-  pending = { school, grade, classNo, name };
+  pending = { school, grade, classNo, name, phone };
   renderAssignedBanner();
   await refreshProgramGrid();
   showView("boothselect");
+}
 
-  document.getElementById("input-school").value = "";
-  document.getElementById("input-grade").value = "";
-  document.getElementById("input-classno").value = "";
-  document.getElementById("input-name").value = "";
+// STEP3(프로그램 선택)에서 뒤로가기 → STEP2로 돌아가되 입력했던 내용을 그대로 채워줌
+function goBackToRegisterForm() {
+  if (!pending) { showView("landing"); return; }
+  showView("register");
+  document.getElementById("input-school").value = pending.school || "";
+  document.getElementById("input-grade").value = pending.grade || "";
+  document.getElementById("input-classno").value = pending.classNo || "";
+  document.getElementById("input-name").value = pending.name || "";
+  document.getElementById("input-phone").value = pending.phone || "";
 }
 
 function renderAssignedBanner() {
@@ -837,7 +887,9 @@ async function refreshProgramGrid() {
     card.disabled = full;
     card.innerHTML = `
       ${full ? '<div class="pfull">마감</div>' : ''}
+      ${cfg.image ? `<img src="${cfg.image}" class="pimage" alt="${cfg.name}" onerror="this.style.display='none'">` : ''}
       <div class="pname">${cfg.name}</div>
+      ${cfg.description ? `<div class="pdesc">${cfg.description}</div>` : ''}
       <div class="pcap mono">${count} / ${cap}명</div>
       <div class="pbar"><div class="pbar-fill" style="width:${pct}%;background:${barColor}"></div></div>
     `;
@@ -847,7 +899,7 @@ async function refreshProgramGrid() {
 }
 
 async function finalizeBoothSelection(boothNum) {
-  const result = await registerOneStudent(currentSession, pending.school, pending.grade, pending.classNo, pending.name, boothNum);
+  const result = await registerOneStudent(currentSession, pending.school, pending.grade, pending.classNo, pending.name, pending.phone, boothNum);
   if (!result.ok) {
     if (result.reason === "duplicate") { alert("🔴 이미 신청되었습니다. 같은 학교/학년/반/이름으로는 중복 신청할 수 없습니다."); pending = null; showView("landing"); }
     else if (result.reason === "wrong_slot") {
@@ -888,7 +940,7 @@ function renderTicket(r) {
       <div>
         <div class="school">${r.school}</div>
         <div class="name">${r.name}</div>
-        <div class="gradeclass">${r.grade}학년 ${r.classNo}반</div>
+        <div class="gradeclass">${r.grade}학년 ${r.classNo}반${r.phone ? " · " + r.phone : ""}</div>
         ${cancelled ? '<span class="cancel-badge">취소됨</span>' : ""}
       </div>
       <div class="resid"><div class="k">예약번호</div><div class="v">${r.id}</div></div>
@@ -997,11 +1049,26 @@ async function cancelReservationFlow(resId) {
   await setState("reservation:" + resId, record, true);
 
   const key = "session_state:" + record.session;
-  const state = await getState(key, emptySessionState(), true);
-  if (state.activeCount > 0) state.activeCount -= 1;
-  if (state.boothCounts[record.booth] > 0) state.boothCounts[record.booth] -= 1;
-  state.cancelledCount = (state.cancelledCount || 0) + 1;
-  await setState(key, state, true);
+  if (storageBackend === "firebase") {
+    try {
+      await fsDb.runTransaction(async (t) => {
+        const ref = fsDb.collection("kv").doc(key);
+        const doc = await t.get(ref);
+        const state = doc.exists ? JSON.parse(doc.data().value) : emptySessionState();
+        if (state.activeCount > 0) state.activeCount -= 1;
+        if (state.boothCounts[record.booth] > 0) state.boothCounts[record.booth] -= 1;
+        state.cancelledCount = (state.cancelledCount || 0) + 1;
+        t.set(ref, { value: JSON.stringify(state), updatedAt: Date.now() });
+        memoryStore[key] = JSON.stringify(state);
+      });
+    } catch (e) { console.error("취소 처리 트랜잭션 실패", e); }
+  } else {
+    const state = await getState(key, emptySessionState(), true);
+    if (state.activeCount > 0) state.activeCount -= 1;
+    if (state.boothCounts[record.booth] > 0) state.boothCounts[record.booth] -= 1;
+    state.cancelledCount = (state.cancelledCount || 0) + 1;
+    await setState(key, state, true);
+  }
 
   const aggKey = "session_reservations:" + record.session;
   const agg = await getState(aggKey, {}, true);
@@ -1016,7 +1083,7 @@ async function cancelReservationFlow(resId) {
   }
 }
 
-/* ---------------- 선생님용 일괄 등록 ---------------- */
+/* ---------------- 교사용 일괄 등록 ---------------- */
 function initTeacherView() {
   const sel = document.getElementById("t-session");
   sel.innerHTML = `<option value="">타임을 선택하세요</option>` +
@@ -1094,7 +1161,8 @@ function handleTeacherExcel(evt) {
         const grade = row["학년"] ?? row["grade"] ?? "";
         const classNo = row["반"] ?? row["class"] ?? "";
         const name = row["이름"] ?? row["name"] ?? "";
-        return `${grade},${classNo},${name}`;
+        const phone = row["휴대폰번호"] ?? row["전화번호"] ?? row["phone"] ?? "";
+        return `${grade},${classNo},${name},${phone}`;
       }).filter(l => l.replace(/,/g, "").trim().length > 0);
       document.getElementById("t-students").value = lines.join("\n");
       toast(`${lines.length}명 불러왔습니다. 내용을 확인한 뒤 일괄 등록을 눌러주세요`);
@@ -1125,9 +1193,10 @@ async function submitTeacherBatch() {
   const results = { ok: [], fail: [] };
   for (const line of lines) {
     const parts = line.split(",").map(x => x.trim());
-    if (parts.length < 3 || !parts[2]) { results.fail.push({ line, reason: "형식 오류 (학년,반,이름)" }); continue; }
-    const [grade, classNo, name] = parts;
-    const r = await registerOneStudent(sessionId, school, grade, classNo, name, boothNum);
+    if (parts.length < 3 || !parts[2]) { results.fail.push({ line, reason: "형식 오류 (학년,반,이름,휴대폰번호)" }); continue; }
+    const [grade, classNo, name, phoneRaw] = parts;
+    const phone = formatPhone(phoneRaw || "");
+    const r = await registerOneStudent(sessionId, school, grade, classNo, name, phone, boothNum);
     if (r.ok) {
       results.ok.push(r.record);
     } else {
@@ -1280,20 +1349,24 @@ async function saveSchoolsSettings() {
   await renderSessionGrid();
 }
 
-function boothRowHtml(id, name, capacity) {
+function boothRowHtml(id, name, capacity, description, image) {
   return `
-    <div class="setting-row booth-row-setting" data-booth-id="${id}">
-      <div class="s-label mono">#${id}</div>
-      <input type="text" class="booth-name-input" value="${name}" placeholder="프로그램명">
-      <input type="number" class="booth-cap-input" value="${capacity}" min="1" max="60">
-      <button type="button" class="btn-danger" style="width:auto;padding:6px 10px;margin:0;font-size:11px;flex-shrink:0;" onclick="removeBoothRow(this)">삭제</button>
+    <div class="setting-row booth-row-setting" data-booth-id="${id}" style="flex-direction:column;align-items:stretch;border:1px solid var(--paper-dim);border-radius:var(--radius);padding:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div class="s-label mono" style="width:auto;">#${id}</div>
+        <input type="text" class="booth-name-input" value="${name}" placeholder="프로그램명">
+        <input type="number" class="booth-cap-input" value="${capacity}" min="1" max="60" style="width:70px;">
+        <button type="button" class="btn-danger" style="width:auto;padding:6px 10px;margin:0;font-size:11px;flex-shrink:0;" onclick="removeBoothRow(this)">삭제</button>
+      </div>
+      <input type="text" class="booth-desc-input" value="${(description || "").replace(/"/g, "&quot;")}" placeholder="프로그램 설명 (선택, 학생 화면에 표시됨)" style="margin-bottom:6px;">
+      <input type="text" class="booth-image-input" value="${(image || "").replace(/"/g, "&quot;")}" placeholder="이미지 URL (선택, 예: https://...)">
     </div>`;
 }
 function addBoothRow() {
   const container = document.getElementById("booth-rows-container");
   const existingIds = Array.from(container.querySelectorAll(".booth-row-setting")).map(el => parseInt(el.dataset.boothId, 10));
   const newId = existingIds.length ? Math.max(...existingIds) + 1 : 1;
-  container.insertAdjacentHTML("beforeend", boothRowHtml(newId, "새 프로그램", 18));
+  container.insertAdjacentHTML("beforeend", boothRowHtml(newId, "새 프로그램", 18, "", ""));
 }
 function removeBoothRow(btn) {
   const container = document.getElementById("booth-rows-container");
@@ -1304,7 +1377,7 @@ function removeBoothRow(btn) {
 let boothSettingsSession = SESSION_META[0].id;
 function renderBoothSettings() {
   const box = document.getElementById("settings-booth");
-  let html = `<div class="settings-hint">프로그램명은 모든 타임에 공통이며, <b>정원은 타임마다 따로</b> 설정할 수 있습니다. 아래 탭에서 타임을 골라 그 타임의 정원을 입력하세요. 탭을 바꾸기 전에 꼭 저장해 주세요.</div>`;
+  let html = `<div class="settings-hint">프로그램명·설명·이미지는 모든 타임에 공통이며, <b>정원은 타임마다 따로</b> 설정할 수 있습니다. 아래 탭에서 타임을 골라 그 타임의 정원을 입력하세요. 탭을 바꾸기 전에 꼭 저장해 주세요.</div>`;
   html += `<div class="admin-session-tabs" id="booth-settings-tabs"></div>`;
   html += `<div id="booth-rows-container"></div>`;
   html += `<button type="button" class="btn-secondary" onclick="addBoothRow()">+ 프로그램 추가</button>`;
@@ -1328,7 +1401,10 @@ function renderBoothSettingsTabs() {
 function renderBoothRowsForSession() {
   const container = document.getElementById("booth-rows-container");
   let html = "";
-  boothIds().forEach(b => { html += boothRowHtml(b, BOOTH_CONFIG[b].name, boothCapacity(b, boothSettingsSession)); });
+  boothIds().forEach(b => {
+    const cfg = BOOTH_CONFIG[b];
+    html += boothRowHtml(b, cfg.name, boothCapacity(b, boothSettingsSession), cfg.description, cfg.image);
+  });
   container.innerHTML = html;
 }
 async function saveBoothSettings() {
@@ -1337,11 +1413,13 @@ async function saveBoothSettings() {
   rows.forEach(row => {
     const id = row.dataset.boothId;
     const name = row.querySelector(".booth-name-input").value.trim() || `프로그램${id}`;
+    const description = row.querySelector(".booth-desc-input").value.trim();
+    const image = row.querySelector(".booth-image-input").value.trim();
     const cap = parseInt(row.querySelector(".booth-cap-input").value, 10);
     const prevCapObj = (BOOTH_CONFIG[id] && typeof BOOTH_CONFIG[id].capacity === "object") ? { ...BOOTH_CONFIG[id].capacity } : {};
     SESSION_META.forEach(s => { if (prevCapObj[s.id] === undefined) prevCapObj[s.id] = 18; });
     prevCapObj[boothSettingsSession] = isNaN(cap) || cap < 1 ? 18 : cap;
-    updated[id] = { name, capacity: prevCapObj };
+    updated[id] = { name, description, image, capacity: prevCapObj };
   });
   if (Object.keys(updated).length === 0) { toast("프로그램이 최소 1개는 있어야 합니다"); return; }
   await setState("booth_config", updated, true);
@@ -1413,7 +1491,7 @@ async function exportExcel() {
       Object.values(agg).forEach(r => {
         rows.push({
           "타임": `${s.date} ${sessionLabel(s)}`,
-          "학교": r.school, "학년": r.grade, "반": r.classNo, "이름": r.name,
+          "학교": r.school, "학년": r.grade, "반": r.classNo, "이름": r.name, "휴대폰번호": r.phone || "",
           "프로그램": r.boothName,
           "상태": r.status === "cancelled" ? "취소" : "참여",
           "예약번호": r.id,
@@ -1425,7 +1503,7 @@ async function exportExcel() {
     if (rows.length === 0) { toast("아직 등록된 예약이 없습니다"); return; }
     if (typeof XLSX === "undefined") { toast("엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [{wch:20},{wch:16},{wch:6},{wch:6},{wch:10},{wch:14},{wch:8},{wch:18},{wch:20},{wch:20}];
+    ws["!cols"] = [{wch:20},{wch:16},{wch:6},{wch:6},{wch:10},{wch:14},{wch:14},{wch:8},{wch:18},{wch:20},{wch:20}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "예약결과");
     const today = new Date();
