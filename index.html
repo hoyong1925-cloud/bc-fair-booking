@@ -140,6 +140,15 @@
   .booth-row .bar-fill { height: 100%; border-radius: 4px; }
   .booth-row .bcount { width: 62px; text-align: right; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--ink-soft); flex-shrink: 0; }
   .booth-list-block { border: 1.5px solid var(--paper-dim); border-radius: var(--radius); overflow: hidden; margin-bottom: 18px; }
+  .reglist-block { border: 1.5px solid var(--paper-dim); border-radius: var(--radius); overflow: hidden; margin-bottom: 18px; }
+  .reglist-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--paper-dim); background: #fff; }
+  .reglist-row:first-child { border-top: none; }
+  .reglist-row.cancelled { opacity: 0.55; }
+  .reglist-name { font-size: 12.5px; font-weight: 700; }
+  .reglist-sub { font-size: 11px; color: var(--ink-soft); margin-top: 2px; font-family: ui-monospace, monospace; }
+  .reglist-cancel-btn { padding: 6px 12px; background: none; border: 1.5px solid var(--danger); color: var(--danger); border-radius: var(--radius); font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+  .reglist-cancel-btn:hover { background: var(--danger); color: #fff; }
+  .reglist-badge { font-size: 10.5px; font-weight: 700; color: var(--ink-soft); flex-shrink: 0; }
   .summary-strip { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .summary-chip { flex: 1; min-width: 120px; background: #fff; border: 1.5px solid var(--paper-dim); border-radius: var(--radius); padding: 10px 12px; }
   .summary-chip .k { font-size: 10.5px; color: var(--ink-soft); }
@@ -475,6 +484,7 @@ let SCHOOL_SLOT = JSON.parse(JSON.stringify(DEFAULT_SCHOOL_SLOT));
 let SLOT_COLORS = { ...DEFAULT_SLOT_COLORS };
 let SCHOOL_SESSION_LOCK_ENABLED = true;
 let BOOTH_CONFIG = defaultBoothConfig();
+let BOOTH_IMAGES = {}; // boothId -> base64 데이터 (Firestore 개별 문서에 저장, Storage 불필요)
 let ADMIN_PASSWORD = DEFAULT_ADMIN_PASSWORD;
 let currentSession = null;
 let pending = null; // {school, grade, classNo, name}
@@ -627,6 +637,16 @@ async function loadConfigs() {
   BOOTH_CONFIG = bc || defaultBoothConfig();
   const pw = await getState("admin_password_config", null, true);
   ADMIN_PASSWORD = pw || DEFAULT_ADMIN_PASSWORD;
+}
+// 프로그램 이미지는 자주 조회되는 loadConfigs()에 넣지 않고, 필요한 화면에서만 병렬로 불러옴
+async function loadBoothImages() {
+  const ids = boothIds();
+  const results = await Promise.all(ids.map(async b => {
+    const img = await getState("booth_image:" + b, null, true);
+    return [b, img];
+  }));
+  BOOTH_IMAGES = {};
+  results.forEach(([b, img]) => { if (img) BOOTH_IMAGES[b] = img; });
 }
 
 /* ---------------- 핵심: 학생 1명 등록 ---------------- */
@@ -869,12 +889,14 @@ async function refreshProgramGrid() {
   const grid = document.getElementById("program-grid");
   grid.innerHTML = `<div class="loading">불러오는 중…</div>`;
   await loadConfigs();
+  await loadBoothImages();
   const state = await getState("session_state:" + currentSession, emptySessionState(), true);
   const counts = state.boothCounts || {};
 
   grid.innerHTML = "";
   boothIds().forEach(b => {
     const cfg = BOOTH_CONFIG[b] || { name: `프로그램${b}` };
+    const image = BOOTH_IMAGES[b] || cfg.image; // 업로드 이미지 우선, 없으면 이전 URL 방식 호환
     const cap = boothCapacity(b, currentSession);
     const count = counts[b] || 0;
     const full = count >= cap;
@@ -887,7 +909,7 @@ async function refreshProgramGrid() {
     card.disabled = full;
     card.innerHTML = `
       ${full ? '<div class="pfull">마감</div>' : ''}
-      ${cfg.image ? `<img src="${cfg.image}" class="pimage" alt="${cfg.name}" onerror="this.style.display='none'">` : ''}
+      ${image ? `<img src="${image}" class="pimage" alt="${cfg.name}" onerror="this.style.display='none'">` : ''}
       <div class="pname">${cfg.name}</div>
       ${cfg.description ? `<div class="pdesc">${cfg.description}</div>` : ''}
       <div class="pcap mono">${count} / ${cap}명</div>
@@ -1036,12 +1058,12 @@ async function doLookup() {
   box.innerHTML = `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
 }
 
-async function cancelReservationFlow(resId) {
+async function cancelReservationFlow(resId, isAdminOverride) {
   const record = await getState("reservation:" + resId, null, true);
   if (!record) { toast("예약 정보를 찾을 수 없습니다"); return; }
   if (record.status === "cancelled") { toast("이미 취소된 예약입니다"); return; }
   await loadConfigs();
-  if (isSessionLocked(record.session)) { alert("🔴 마감되었습니다. 이 타임은 더 이상 취소할 수 없습니다."); return; }
+  if (!isAdminOverride && isSessionLocked(record.session)) { alert("🔴 마감되었습니다. 이 타임은 더 이상 취소할 수 없습니다."); return; }
   if (!confirm(`${record.school} ${record.name} 학생의 예약을 취소하시겠습니까?\n(${record.boothName})`)) return;
 
   record.status = "cancelled";
@@ -1349,7 +1371,7 @@ async function saveSchoolsSettings() {
   await renderSessionGrid();
 }
 
-function boothRowHtml(id, name, capacity, description, image) {
+function boothRowHtml(id, name, capacity, description, imageDataUrl) {
   return `
     <div class="setting-row booth-row-setting" data-booth-id="${id}" style="flex-direction:column;align-items:stretch;border:1px solid var(--paper-dim);border-radius:var(--radius);padding:10px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -1359,8 +1381,47 @@ function boothRowHtml(id, name, capacity, description, image) {
         <button type="button" class="btn-danger" style="width:auto;padding:6px 10px;margin:0;font-size:11px;flex-shrink:0;" onclick="removeBoothRow(this)">삭제</button>
       </div>
       <input type="text" class="booth-desc-input" value="${(description || "").replace(/"/g, "&quot;")}" placeholder="프로그램 설명 (선택, 학생 화면에 표시됨)" style="margin-bottom:6px;">
-      <input type="text" class="booth-image-input" value="${(image || "").replace(/"/g, "&quot;")}" placeholder="이미지 URL (선택, 예: https://...)">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img class="booth-img-preview" data-booth-id="${id}" src="${imageDataUrl || ""}" style="width:70px;height:50px;object-fit:cover;border-radius:3px;background:var(--paper-dim);${imageDataUrl ? "" : "display:none;"}" onerror="this.style.display='none'">
+        <div style="flex:1;">
+          <input type="file" accept="image/*" style="font-size:11px;" onchange="uploadBoothImage(${id}, this)">
+          <div class="settings-hint" style="margin:4px 0 0;">사진을 고르면 자동으로 압축되어 즉시 저장됩니다 (별도 저장 버튼 불필요)</div>
+        </div>
+      </div>
     </div>`;
+}
+async function uploadBoothImage(boothId, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { toast("이미지 파일만 선택해 주세요"); return; }
+  toast("이미지 처리 중…");
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = async function() {
+      const maxW = 360;
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      if (dataUrl.length > 700000) { toast("🔴 이미지 용량이 너무 큽니다. 더 작은 사진을 사용해 주세요"); return; }
+      try {
+        await setState("booth_image:" + boothId, dataUrl, true);
+        BOOTH_IMAGES[boothId] = dataUrl;
+        const preview = document.querySelector(`.booth-img-preview[data-booth-id="${boothId}"]`);
+        if (preview) { preview.src = dataUrl; preview.style.display = "block"; }
+        toast("✅ 이미지가 저장되었습니다");
+      } catch (err) {
+        console.error(err);
+        toast("이미지 저장 중 오류가 발생했습니다");
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 function addBoothRow() {
   const container = document.getElementById("booth-rows-container");
@@ -1375,16 +1436,16 @@ function removeBoothRow(btn) {
   btn.closest(".booth-row-setting").remove();
 }
 let boothSettingsSession = SESSION_META[0].id;
-function renderBoothSettings() {
+async function renderBoothSettings() {
   const box = document.getElementById("settings-booth");
-  let html = `<div class="settings-hint">프로그램명·설명·이미지는 모든 타임에 공통이며, <b>정원은 타임마다 따로</b> 설정할 수 있습니다. 아래 탭에서 타임을 골라 그 타임의 정원을 입력하세요. 탭을 바꾸기 전에 꼭 저장해 주세요.</div>`;
+  let html = `<div class="settings-hint">프로그램명·설명·이미지는 모든 타임에 공통이며, <b>정원은 타임마다 따로</b> 설정할 수 있습니다. 아래 탭에서 타임을 골라 그 타임의 정원을 입력하세요. 탭을 바꾸기 전에 꼭 저장해 주세요. (이미지는 업로드 즉시 저장되고, 정원/이름/설명은 아래 저장 버튼을 눌러야 반영됩니다)</div>`;
   html += `<div class="admin-session-tabs" id="booth-settings-tabs"></div>`;
-  html += `<div id="booth-rows-container"></div>`;
+  html += `<div id="booth-rows-container"><div class="loading">불러오는 중…</div></div>`;
   html += `<button type="button" class="btn-secondary" onclick="addBoothRow()">+ 프로그램 추가</button>`;
   html += `<button class="settings-save" id="save-booth-btn" onclick="saveBoothSettings()">이 타임 저장</button>`;
   box.innerHTML = html;
   renderBoothSettingsTabs();
-  renderBoothRowsForSession();
+  await renderBoothRowsForSession();
 }
 function renderBoothSettingsTabs() {
   const tabs = document.getElementById("booth-settings-tabs");
@@ -1394,16 +1455,17 @@ function renderBoothSettingsTabs() {
     b.type = "button";
     b.className = "admin-tab" + (s.id === boothSettingsSession ? " active" : "");
     b.textContent = `${s.date.slice(-4, -1)} ${s.slot}타임`;
-    b.onclick = () => { boothSettingsSession = s.id; renderBoothSettingsTabs(); renderBoothRowsForSession(); };
+    b.onclick = async () => { boothSettingsSession = s.id; renderBoothSettingsTabs(); await renderBoothRowsForSession(); };
     tabs.appendChild(b);
   });
 }
-function renderBoothRowsForSession() {
+async function renderBoothRowsForSession() {
+  await loadBoothImages();
   const container = document.getElementById("booth-rows-container");
   let html = "";
   boothIds().forEach(b => {
     const cfg = BOOTH_CONFIG[b];
-    html += boothRowHtml(b, cfg.name, boothCapacity(b, boothSettingsSession), cfg.description, cfg.image);
+    html += boothRowHtml(b, cfg.name, boothCapacity(b, boothSettingsSession), cfg.description, BOOTH_IMAGES[b]);
   });
   container.innerHTML = html;
 }
@@ -1414,20 +1476,27 @@ async function saveBoothSettings() {
     const id = row.dataset.boothId;
     const name = row.querySelector(".booth-name-input").value.trim() || `프로그램${id}`;
     const description = row.querySelector(".booth-desc-input").value.trim();
-    const image = row.querySelector(".booth-image-input").value.trim();
     const cap = parseInt(row.querySelector(".booth-cap-input").value, 10);
     const prevCapObj = (BOOTH_CONFIG[id] && typeof BOOTH_CONFIG[id].capacity === "object") ? { ...BOOTH_CONFIG[id].capacity } : {};
     SESSION_META.forEach(s => { if (prevCapObj[s.id] === undefined) prevCapObj[s.id] = 18; });
     prevCapObj[boothSettingsSession] = isNaN(cap) || cap < 1 ? 18 : cap;
-    updated[id] = { name, description, image, capacity: prevCapObj };
+    updated[id] = { name, description, capacity: prevCapObj };
   });
   if (Object.keys(updated).length === 0) { toast("프로그램이 최소 1개는 있어야 합니다"); return; }
   await setState("booth_config", updated, true);
   BOOTH_CONFIG = updated;
+
+  // 이 타임의 부스 정원 합계로 "타임 전체 인원"도 자동으로 함께 맞춤 (①과 ③이 어긋나지 않도록)
+  const sum = Object.keys(updated).reduce((total, id) => total + boothCapacity(id, boothSettingsSession), 0);
+  const updatedTotals = { ...SESSION_TOTALS, [boothSettingsSession]: sum };
+  await setState("session_totals_config", updatedTotals, true);
+  SESSION_TOTALS = updatedTotals;
+
   const bm = sessionMeta(boothSettingsSession);
-  toast(`✅ ${bm.date} ${sessionLabel(bm)} 정원이 저장되었습니다`);
+  toast(`✅ ${bm.date} ${sessionLabel(bm)} 정원 저장 (전체 인원도 ${sum}명으로 자동 반영됨)`);
   flashSaveConfirm(document.getElementById("save-booth-btn"));
   loadAdmin();
+  renderSessionGrid();
 }
 
 function renderColorSettings() {
@@ -1592,7 +1661,36 @@ async function loadAdmin() {
       </div>`;
   });
   html += `</div>`;
+
+  const agg = await getState("session_reservations:" + adminSession, {}, true);
+  const list = Object.values(agg).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  html += `<div class="settings-subhead">신청자 명단 (${list.filter(r => r.status !== "cancelled").length}명 · 취소 ${list.filter(r => r.status === "cancelled").length}건)</div>`;
+  if (list.length === 0) {
+    html += `<div class="empty-msg">아직 신청자가 없습니다</div>`;
+  } else {
+    html += `<div class="reglist-block">`;
+    list.forEach(r => {
+      const cancelled = r.status === "cancelled";
+      html += `
+        <div class="reglist-row${cancelled ? " cancelled" : ""}">
+          <div class="reglist-info">
+            <div class="reglist-name">${r.school} ${r.grade}학년 ${r.classNo}반 ${r.name}</div>
+            <div class="reglist-sub">${r.phone || ""}${r.phone ? " · " : ""}${r.boothName} · ${r.id}</div>
+          </div>
+          ${cancelled
+            ? `<span class="reglist-badge">취소됨</span>`
+            : `<button class="reglist-cancel-btn" onclick="adminCancelReservation('${r.id}')">취소</button>`}
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
   content.innerHTML = html;
+}
+
+async function adminCancelReservation(resId) {
+  await cancelReservationFlow(resId, true);
+  await loadAdmin();
 }
 
 /* ---------------- 초기화 ---------------- */
