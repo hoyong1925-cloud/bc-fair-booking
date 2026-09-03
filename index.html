@@ -950,7 +950,12 @@ function renderTicket(r) {
   const locked = isSessionLocked(r.session);
   let cancelSection = "";
   if (cancelled) {
-    cancelSection = `<div class="cancel-box"><span class="cancel-badge">취소된 예약입니다</span></div>`;
+    cancelSection = `
+      <div class="cancel-box">
+        <span class="cancel-badge">취소된 예약입니다</span>
+        <button class="btn-primary" style="margin-top:10px;" onclick="reselectAfterCancel()">↻ 다른 프로그램으로 다시 신청하기</button>
+      </div>`;
+    window.__lastCancelledRecord = r;
   } else if (locked) {
     cancelSection = `<div class="cancel-box note-box" style="margin:0 18px 18px;">🔴 마감되었습니다 (마감일시: ${fmtDeadline(r.session)}). 더 이상 취소할 수 없습니다.</div>`;
   } else {
@@ -1056,6 +1061,21 @@ async function doLookup() {
   if (!record) { box.innerHTML = `<div class="empty-msg">해당 예약번호를 찾을 수 없습니다</div>`; return; }
   renderTicket(record);
   box.innerHTML = `<div class="ticket" style="margin-top:16px;">` + document.getElementById("ticket-container").innerHTML + `</div>`;
+}
+
+// 취소된 예약에서만 노출되는 버튼: 같은 정보로 프로그램만 다시 선택하도록 이동
+// (취소된 예약이라 중복신청 검사에 걸리지 않으며, 활성 예약에는 이 버튼 자체가 노출되지 않음)
+function reselectAfterCancel() {
+  const r = window.__lastCancelledRecord;
+  if (!r) { showView("landing"); return; }
+  const meta = sessionMeta(r.session);
+  if (!meta) { showView("landing"); return; }
+  if (isSessionLocked(r.session)) { alert("🔴 마감되었습니다. 이 타임은 더 이상 신청할 수 없습니다."); showView("landing"); return; }
+  currentSession = r.session;
+  pending = { school: r.school, grade: r.grade, classNo: r.classNo, name: r.name, phone: r.phone };
+  renderAssignedBanner();
+  refreshProgramGrid();
+  showView("boothselect");
 }
 
 async function cancelReservationFlow(resId, isAdminOverride) {
